@@ -1,0 +1,32 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Kotlin
+.kotlin/
+
+# Fabric / Minecraft runtime
+run/
+logs/
+crash-reports/
+debug.log
+hs_err_pid*
+replay_pid*
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local environment
+.env
+.env.*
+!.env.example

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "${mod_description}",
+  "authors": [
+    "${mod_author}"
+  ],
+  "contact": {
+    "sources": "https://github.com/WJZ-P/Better-Health-Indicator"
+  },
+  "license": "AGPL-3.0-or-later",
+  "environment": "client",
+  "entrypoints": {
+    "main": [
+      {
+        "adapter": "kotlin",
+        "value": "dev.wenjiazhen.betterhealthindicator.BetterHealthIndicatorMod"
+      }
+    ],
+    "client": [
+      {
+        "adapter": "kotlin",
+        "value": "dev.wenjiazhen.betterhealthindicator.client.BetterHealthIndicatorClient"
+      }
+    ]
+  },
+  "depends": {
+    "java": ">=${java_version}",
+    "minecraft": "${minecraft_version}",
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": ">=${fabric_api_version}",
+    "fabric-language-kotlin": ">=${fabric_kotlin_version}"
+  }
+}
