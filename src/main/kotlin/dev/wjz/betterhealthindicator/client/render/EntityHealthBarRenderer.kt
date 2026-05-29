@@ -5,49 +5,100 @@ import com.mojang.blaze3d.vertex.VertexConsumer
 import dev.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
-import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
+import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.util.LightCoordsUtil
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
 import org.joml.Matrix4f
+import org.joml.Quaternionf
 
+/**
+ * 在生物头顶提交一个面向摄像机的血条。
+ *
+ * 26.1 的世界渲染采用 extraction/submit 两阶段管线，因此这里在 [LevelRenderEvents.COLLECT_SUBMITS]
+ * 阶段把几何交给 [SubmitNodeCollector.submitCustomGeometry]，由原版渲染系统在正确的投影、深度与批次下统一绘制。
+ */
 object EntityHealthBarRenderer {
-    private val settings = HealthBarSettings()
+    private val config = HealthBarConfig()
+
+    private var firstFireLogged = false
+    private var lastStatsLogMs = 0L
+    private var geometryCallbackCount = 0
+    private var lastGeomLogMs = 0L
 
     fun register() {
-        LevelRenderEvents.AFTER_SOLID_FEATURES.register(
-            LevelRenderEvents.AfterSolidFeatures { context -> render(context) },
+        LevelRenderEvents.COLLECT_SUBMITS.register(
+            LevelRenderEvents.CollectSubmits { context -> collectSubmits(context) },
         )
         BetterHealthIndicatorLogger.info("Entity health bar renderer registered.")
     }
 
-    private fun render(context: LevelRenderContext) {
+    private fun collectSubmits(context: LevelRenderContext) {
+        if (config.debug && !firstFireLogged) {
+            firstFireLogged = true
+            BetterHealthIndicatorLogger.info("COLLECT_SUBMITS fired for the first time (event wiring OK).")
+        }
+
+        val poseStack = context.poseStack()
+        val collector = context.submitNodeCollector()
         val minecraft = Minecraft.getInstance()
         val level = minecraft.level ?: return
-        val poseStack = context.poseStack()
-        val bufferSource = context.bufferSource()
         val camera = minecraft.gameRenderer.mainCamera
         val cameraPosition = camera.position()
+        val cameraOrientation = camera.rotation()
         val tickProgress = minecraft.deltaTracker.getGameTimeDeltaPartialTick(false)
-        val vertexConsumer = bufferSource.getBuffer(RenderTypes.textBackground())
 
-        var rendered = false
+        val now = System.currentTimeMillis()
+        val doLog = config.debug && now - lastStatsLogMs >= 2000L
+
+        var livingCount = 0
+        var submittedCount = 0
         for (entity in level.entitiesForRendering()) {
-            if (entity is LivingEntity && shouldRender(entity, minecraft, cameraPosition)) {
-                renderHealthBar(entity, camera, poseStack, vertexConsumer, tickProgress, cameraPosition)
-                rendered = true
+            if (entity !is LivingEntity) {
+                continue
+            }
+
+            livingCount++
+            val pass = shouldRender(entity, minecraft, cameraPosition)
+
+            if (doLog && livingCount == 1) {
+                BetterHealthIndicatorLogger.info(
+                    "inspect first living: type={}, isSelf={}, alive={}, invisible={}, hp={}/{}, distSq={}, maxDistSq={}, pass={}",
+                    entity.type,
+                    entity === minecraft.player,
+                    entity.isAlive,
+                    entity.isInvisible,
+                    entity.health,
+                    entity.maxHealth,
+                    entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z),
+                    config.maxDistanceSquared,
+                    pass,
+                )
+            }
+
+            if (pass) {
+                submitHealthBar(entity, collector, poseStack, cameraPosition, cameraOrientation, tickProgress)
+                submittedCount++
             }
         }
 
-        if (rendered) {
-            bufferSource.endBatch()
+        if (doLog) {
+            lastStatsLogMs = now
+            BetterHealthIndicatorLogger.info(
+                "stats: living={}, submitted={}, geometryCallbacks(last~2s)={}, poseStackNull={}",
+                livingCount,
+                submittedCount,
+                geometryCallbackCount,
+                false,
+            )
+            geometryCallbackCount = 0
         }
     }
 
     private fun shouldRender(entity: LivingEntity, minecraft: Minecraft, cameraPosition: Vec3): Boolean {
-        if (!settings.showSelf && entity == minecraft.player) {
+        if (!config.showSelf && entity === minecraft.player) {
             return false
         }
 
@@ -60,59 +111,76 @@ object EntityHealthBarRenderer {
             return false
         }
 
-        if (!settings.showFullHealthEntities && entity.health >= maxHealth) {
+        if (!config.showFullHealthEntities && entity.health >= maxHealth) {
             return false
         }
 
-        return entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z) <= settings.maxDistanceSquared
+        return entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z) <= config.maxDistanceSquared
     }
 
-    private fun renderHealthBar(
+    private fun submitHealthBar(
         entity: LivingEntity,
-        camera: Camera,
+        collector: SubmitNodeCollector,
         poseStack: PoseStack,
-        vertexConsumer: VertexConsumer,
-        tickProgress: Float,
         cameraPosition: Vec3,
+        cameraOrientation: Quaternionf,
+        tickProgress: Float,
     ) {
-        val entityPosition = entity.getPosition(tickProgress)
+        val position = entity.getPosition(tickProgress)
         val healthRatio = (entity.health / entity.maxHealth).coerceIn(0.0f, 1.0f)
-        val fillWidth = settings.width * healthRatio
+        val fillWidth = config.width * healthRatio
+
+        val left = -config.width / 2.0f
+        val right = config.width / 2.0f
+        val top = -config.height / 2.0f
+        val bottom = config.height / 2.0f
+        val foreground = healthColor(healthRatio)
 
         poseStack.pushPose()
         try {
             poseStack.translate(
-                entityPosition.x - cameraPosition.x,
-                entityPosition.y - cameraPosition.y + entity.bbHeight + settings.yOffset,
-                entityPosition.z - cameraPosition.z,
+                position.x - cameraPosition.x,
+                position.y - cameraPosition.y + entity.bbHeight + config.yOffset,
+                position.z - cameraPosition.z,
             )
-            poseStack.mulPose(camera.rotation())
-            poseStack.scale(-settings.scale, -settings.scale, settings.scale)
+            poseStack.mulPose(cameraOrientation)
+            poseStack.scale(-config.scale, -config.scale, config.scale)
 
-            val matrix = poseStack.last().pose()
-            val left = -settings.width / 2.0f
-            val right = settings.width / 2.0f
-            val top = -settings.height / 2.0f
-            val bottom = settings.height / 2.0f
-
-            drawQuad(
-                vertexConsumer,
-                matrix,
-                left - settings.borderSize,
-                top - settings.borderSize,
-                right + settings.borderSize,
-                bottom + settings.borderSize,
-                settings.borderColor,
-            )
-            drawQuad(vertexConsumer, matrix, left, top, right, bottom, settings.backgroundColor)
-            drawQuad(vertexConsumer, matrix, left, top, left + fillWidth, bottom, healthColor(healthRatio))
+            collector.submitCustomGeometry(poseStack, RenderTypes.textBackground()) { pose, consumer ->
+                geometryCallbackCount++
+                val matrix = pose.pose()
+                if (config.debug) {
+                    val nowGeom = System.currentTimeMillis()
+                    if (nowGeom - lastGeomLogMs >= 2000L) {
+                        lastGeomLogMs = nowGeom
+                        BetterHealthIndicatorLogger.info(
+                            "geometry draw: poseTranslate=({}, {}, {}), renderType={}",
+                            matrix.m30(),
+                            matrix.m31(),
+                            matrix.m32(),
+                            RenderTypes.textBackground(),
+                        )
+                    }
+                }
+                drawQuad(
+                    consumer,
+                    matrix,
+                    left - config.borderSize,
+                    top - config.borderSize,
+                    right + config.borderSize,
+                    bottom + config.borderSize,
+                    config.borderColor,
+                )
+                drawQuad(consumer, matrix, left, top, right, bottom, config.backgroundColor)
+                drawQuad(consumer, matrix, left, top, left + fillWidth, bottom, foreground)
+            }
         } finally {
             poseStack.popPose()
         }
     }
 
     private fun drawQuad(
-        vertexConsumer: VertexConsumer,
+        consumer: VertexConsumer,
         matrix: Matrix4f,
         left: Float,
         top: Float,
@@ -120,17 +188,25 @@ object EntityHealthBarRenderer {
         bottom: Float,
         color: Int,
     ) {
-        vertexConsumer.addVertex(matrix, left, bottom, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-        vertexConsumer.addVertex(matrix, right, bottom, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-        vertexConsumer.addVertex(matrix, right, top, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-        vertexConsumer.addVertex(matrix, left, top, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
+        consumer.addVertex(matrix, left, bottom, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
+        consumer.addVertex(matrix, right, bottom, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
+        consumer.addVertex(matrix, right, top, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
+        consumer.addVertex(matrix, left, top, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
     }
 
-    private fun healthColor(healthRatio: Float): Int {
-        val red = ((1.0f - healthRatio) * 255.0f).toInt().coerceIn(0, 255)
-        val green = (healthRatio * 255.0f).toInt().coerceIn(0, 255)
+    /** 血量从满到空：绿 -> 黄 -> 红。 */
+    private fun healthColor(ratio: Float): Int {
+        val red: Int
+        val green: Int
+        if (ratio >= 0.5f) {
+            red = ((1.0f - ratio) * 2.0f * 255.0f).toInt()
+            green = 255
+        } else {
+            red = 255
+            green = (ratio * 2.0f * 255.0f).toInt()
+        }
 
-        return argb(settings.foregroundAlpha, red, green, 48)
+        return argb(config.foregroundAlpha, red, green, 48)
     }
 
     private fun argb(alpha: Int, red: Int, green: Int, blue: Int): Int {
@@ -138,21 +214,5 @@ object EntityHealthBarRenderer {
             (red.coerceIn(0, 255) shl 16) or
             (green.coerceIn(0, 255) shl 8) or
             blue.coerceIn(0, 255)
-    }
-
-    private data class HealthBarSettings(
-        val maxDistance: Double = 48.0,
-        val width: Float = 32.0f,
-        val height: Float = 4.0f,
-        val borderSize: Float = 1.0f,
-        val yOffset: Double = 0.45,
-        val scale: Float = 0.025f,
-        val showSelf: Boolean = false,
-        val showFullHealthEntities: Boolean = true,
-        val foregroundAlpha: Int = 224,
-        val backgroundColor: Int = 0xAA202020.toInt(),
-        val borderColor: Int = 0xCC000000.toInt(),
-    ) {
-        val maxDistanceSquared: Double = maxDistance * maxDistance
     }
 }
