@@ -1,8 +1,8 @@
-package dev.wjz.betterhealthindicator
+package com.wjz.betterhealthindicator
 
-import dev.wjz.betterhealthindicator.client.hud.HealthPanelHud
-import dev.wjz.betterhealthindicator.client.render.EntityHealthBarRenderer
-import dev.wjz.betterhealthindicator.config.ConfigManager
+import com.wjz.betterhealthindicator.client.hud.HealthPanelHud
+import com.wjz.betterhealthindicator.client.render.EntityHealthBarRenderer
+import com.wjz.betterhealthindicator.config.ConfigManager
 import net.fabricmc.api.ClientModInitializer
 
 class BetterHealthIndicatorClient : ClientModInitializer {

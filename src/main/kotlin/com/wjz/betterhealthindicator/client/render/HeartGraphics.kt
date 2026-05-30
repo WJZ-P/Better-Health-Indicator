@@ -1,4 +1,4 @@
-package dev.wjz.betterhealthindicator.client.render
+package com.wjz.betterhealthindicator.client.render
 
 import com.mojang.blaze3d.vertex.VertexConsumer
 import net.minecraft.client.renderer.texture.OverlayTexture
@@ -25,11 +25,11 @@ object HeartGraphics {
         vertex(consumer, matrix, right, bottom, 1.0f, 1.0f, color)
         vertex(consumer, matrix, right, top, 1.0f, 0.0f, color)
         vertex(consumer, matrix, left, top, 0.0f, 0.0f, color)
-        // 背面（反向缠绕）
-        vertex(consumer, matrix, left, top, 0.0f, 0.0f, color)
-        vertex(consumer, matrix, right, top, 1.0f, 0.0f, color)
-        vertex(consumer, matrix, right, bottom, 1.0f, 1.0f, color)
-        vertex(consumer, matrix, left, bottom, 0.0f, 1.0f, color)
+        // 背面（反向缠绕） 实际上不需要，因为永远是面对着玩家的
+//        vertex(consumer, matrix, left, top, 0.0f, 0.0f, color)
+//        vertex(consumer, matrix, right, top, 1.0f, 0.0f, color)
+//        vertex(consumer, matrix, right, bottom, 1.0f, 1.0f, color)
+//        vertex(consumer, matrix, left, bottom, 0.0f, 1.0f, color)
     }
 
     private fun vertex(consumer: VertexConsumer, matrix: Matrix4f, x: Float, y: Float, u: Float, v: Float, color: Int) {

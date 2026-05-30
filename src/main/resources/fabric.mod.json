@@ -11,10 +11,10 @@
   "environment": "client",
   "entrypoints": {
     "client": [
-      "dev.wjz.betterhealthindicator.BetterHealthIndicatorClient"
+      "com.wjz.betterhealthindicator.BetterHealthIndicatorClient"
     ],
     "modmenu": [
-      "dev.wjz.betterhealthindicator.client.gui.ModMenuIntegration"
+      "com.wjz.betterhealthindicator.client.gui.ModMenuIntegration"
     ]
   },
   "depends": {

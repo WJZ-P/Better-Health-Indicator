@@ -1,7 +1,7 @@
-package dev.wjz.betterhealthindicator.client.render
+package com.wjz.betterhealthindicator.client.render
 
-import dev.wjz.betterhealthindicator.config.DisplayMode
-import dev.wjz.betterhealthindicator.config.HealthIndicatorConfig
+import com.wjz.betterhealthindicator.config.DisplayMode
+import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
@@ -19,7 +19,6 @@ import kotlin.math.cos
 object EntitySelector {
     private const val MAX_OCCLUSION_STEPS = 8
     private const val STEP_EPSILON = 0.01
-    private const val MAX_ON_SCREEN_FOV_DEGREES = 80.0
 
     /** 每帧渲染所需的共享上下文。 */
     class Frame(
@@ -36,15 +35,26 @@ object EntitySelector {
     fun buildFrame(minecraft: Minecraft, config: HealthIndicatorConfig, tickProgress: Float): Frame? {
         val level = minecraft.level ?: return null
         val camera = minecraft.gameRenderer.mainCamera
-        val lookedAt = if (config.displayMode == DisplayMode.LOOKING_AT) {
-            getLookedAtEntity(minecraft, camera, config.maxDistance)
-        } else {
-            null
-        }
+        // 头顶血条的 LOOKING_AT 策略与屏幕面板都需要准星目标，故二者任一启用时都做射线拾取。
+        val needLookedAt = config.displayMode == DisplayMode.LOOKING_AT || config.panelEnabled
+        val lookedAt = if (needLookedAt) getLookedAtEntity(minecraft, camera, config.maxDistance) else null
         return Frame(minecraft, level, camera, camera.position(), lookedAt, tickProgress, config)
     }
 
     fun shouldShow(entity: LivingEntity, frame: Frame): Boolean {
+        if (!passesCommonFilters(entity, frame)) return false
+
+        when (frame.config.displayMode) {
+            DisplayMode.ALWAYS -> {}
+            DisplayMode.LOOKING_AT -> if (entity !== frame.lookedAtEntity) return false
+            DisplayMode.ON_SCREEN -> if (!isOnScreen(frame.minecraft, frame.camera, entity.getPosition(frame.tickProgress))) return false
+        }
+
+        return true
+    }
+
+    /** 与显示策略无关的通用过滤：总开关、存活/可见、血量、距离、实心墙遮挡。 */
+    private fun passesCommonFilters(entity: LivingEntity, frame: Frame): Boolean {
         val config = frame.config
         if (!config.enabled) return false
         if (!config.showSelf && entity === frame.minecraft.player) return false
@@ -59,12 +69,6 @@ object EntitySelector {
             return false
         }
 
-        when (config.displayMode) {
-            DisplayMode.ALWAYS -> {}
-            DisplayMode.LOOKING_AT -> if (entity !== frame.lookedAtEntity) return false
-            DisplayMode.ON_SCREEN -> if (!isOnScreen(frame.minecraft, frame.camera, entity.getPosition(frame.tickProgress))) return false
-        }
-
         if (config.occludeBehindWalls) {
             val viewer = frame.minecraft.cameraEntity
             if (viewer != null &&
@@ -77,25 +81,10 @@ object EntitySelector {
         return true
     }
 
-    /** 为屏幕面板挑选当前关注目标：LOOKING_AT 取准星实体；否则取范围内最近的可显示生物。 */
+    /** 屏幕面板目标：仅当准星正对生物、在范围内、且未被实心墙遮挡时返回，否则不显示。 */
     fun pickPanelTarget(frame: Frame): LivingEntity? {
-        if (frame.config.displayMode == DisplayMode.LOOKING_AT) {
-            val target = frame.lookedAtEntity
-            return if (target != null && shouldShow(target, frame)) target else null
-        }
-
-        var best: LivingEntity? = null
-        var bestDistSq = Double.MAX_VALUE
-        val cameraPosition = frame.cameraPosition
-        for (entity in frame.level.entitiesForRendering()) {
-            if (entity !is LivingEntity || !shouldShow(entity, frame)) continue
-            val distSq = entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z)
-            if (distSq < bestDistSq) {
-                bestDistSq = distSq
-                best = entity
-            }
-        }
-        return best
+        val target = frame.lookedAtEntity ?: return null
+        return if (passesCommonFilters(target, frame)) target else null
     }
 
     private fun getLookedAtEntity(minecraft: Minecraft, camera: Camera, maxDistance: Double): LivingEntity? {
@@ -118,13 +107,13 @@ object EntitySelector {
 
     private fun isOnScreen(minecraft: Minecraft, camera: Camera, entityPosition: Vec3): Boolean {
         val cameraPosition = camera.position()
-        val toEntity = entityPosition.subtract(cameraPosition)
-        val length = toEntity.length()
+        val toEntity : Vec3 = entityPosition.subtract(cameraPosition)
+        val length = toEntity.length()  //  如果实体距离我们太近，除0可能有问题，直接返回true即可，在我们屏幕内。
         if (length < 1.0e-4) return true
 
         val forward = camera.forwardVector()
         val dot = (forward.x() * toEntity.x + forward.y() * toEntity.y + forward.z() * toEntity.z) / length
-        val fovDegrees = minecraft.options.fov().get().toDouble().coerceAtMost(MAX_ON_SCREEN_FOV_DEGREES)
+        val fovDegrees = minecraft.options.fov().get().toDouble()
         val threshold = cos(Math.toRadians(fovDegrees))
         return dot >= threshold
     }

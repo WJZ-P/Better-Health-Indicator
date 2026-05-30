@@ -1,9 +1,9 @@
-package dev.wjz.betterhealthindicator.client.gui
+package com.wjz.betterhealthindicator.client.gui
 
-import dev.wjz.betterhealthindicator.config.BarStyle
-import dev.wjz.betterhealthindicator.config.ConfigManager
-import dev.wjz.betterhealthindicator.config.DisplayMode
-import dev.wjz.betterhealthindicator.config.PanelCorner
+import com.wjz.betterhealthindicator.config.BarStyle
+import com.wjz.betterhealthindicator.config.ConfigManager
+import com.wjz.betterhealthindicator.config.DisplayMode
+import com.wjz.betterhealthindicator.config.PanelCorner
 import me.shedaniel.clothconfig2.api.ConfigBuilder
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component

@@ -1,4 +1,4 @@
-package dev.wjz.betterhealthindicator.client.render
+package com.wjz.betterhealthindicator.client.render
 
 import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.renderer.SubmitNodeCollector
@@ -15,9 +15,9 @@ import java.util.Random
  */
 object HeartParticleManager {
     private const val GRAVITY = 5.0
-    private const val MAX_AGE = 1.1f
+    private const val MAX_AGE = 1.25f
     private const val SCALE = 0.025f
-    private const val MAX_PARTICLES = 256
+    private const val MAX_PARTICLES = 1024
     private const val MAX_FRAME_DELTA = 0.1f
 
     private class Particle(

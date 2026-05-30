@@ -1,9 +1,9 @@
-package dev.wjz.betterhealthindicator.client.hud
+package com.wjz.betterhealthindicator.client.hud
 
-import dev.wjz.betterhealthindicator.BetterHealthIndicatorLogger
-import dev.wjz.betterhealthindicator.config.ConfigManager
-import dev.wjz.betterhealthindicator.config.PanelCorner
-import dev.wjz.betterhealthindicator.client.render.EntitySelector
+import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
+import com.wjz.betterhealthindicator.config.ConfigManager
+import com.wjz.betterhealthindicator.config.PanelCorner
+import com.wjz.betterhealthindicator.client.render.EntitySelector
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.client.Minecraft
@@ -15,6 +15,7 @@ import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
 import org.joml.Quaternionf
 import org.joml.Vector3f
+import kotlin.math.atan2
 import kotlin.math.ceil
 
 /**
@@ -85,7 +86,7 @@ object HealthPanelHud {
         BetterHealthIndicatorLogger.info("Health panel HUD registered.")
     }
 
-    private const val MODEL_YAW = 35.0f
+    private const val PANEL_TILT = 35.0f
     private const val MODEL_PITCH = -8.0f
 
     private fun renderEntityModel(
@@ -101,8 +102,10 @@ object HealthPanelHud {
         renderState.shadowPieces.clear()
         renderState.outlineColor = 0
         if (renderState is LivingEntityRenderState) {
-            renderState.bodyRot = 180.0f + MODEL_YAW
-            renderState.yRot = MODEL_YAW
+            // 在固定斜角基础上叠加“玩家相对生物的水平视角”：生物转身/逃跑时，面板会同步显示侧面或背面。
+            val modelYaw = PANEL_TILT - relativeViewYaw(entity)
+            renderState.bodyRot = 180.0f + modelYaw
+            renderState.yRot = modelYaw
             renderState.xRot = if (renderState.pose != Pose.FALL_FLYING) MODEL_PITCH else 0.0f
             renderState.boundingBoxWidth = renderState.boundingBoxWidth / renderState.scale
             renderState.boundingBoxHeight = renderState.boundingBoxHeight / renderState.scale
@@ -116,6 +119,21 @@ object HealthPanelHud {
         val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Math.PI.toFloat() / 180.0f))
         rotation.mul(cameraTilt)
         graphics.entity(renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
+    }
+
+    /**
+     * 玩家相机相对目标身体朝向的水平角（度，归一化到 [-180,180)）。
+     * 0 表示玩家正看生物正面，±180 表示看到背面。若左右转向与预期相反，把下方减号改成加号即可。
+     */
+    private fun relativeViewYaw(entity: LivingEntity): Float {
+        val cameraPosition = Minecraft.getInstance().gameRenderer.mainCamera.position()
+        val dx = cameraPosition.x - entity.x
+        val dz = cameraPosition.z - entity.z
+        if (dx * dx + dz * dz < 1.0e-8) return 0.0f
+        val yawToCamera = Math.toDegrees(atan2(-dx, dz)).toFloat()
+        var relative = yawToCamera - entity.yBodyRot
+        relative = ((relative % 360.0f) + 540.0f) % 360.0f - 180.0f
+        return relative
     }
 
     private fun healthColor(ratio: Float): Int {

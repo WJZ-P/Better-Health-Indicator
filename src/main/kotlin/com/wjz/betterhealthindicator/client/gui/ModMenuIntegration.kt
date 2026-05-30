@@ -1,4 +1,4 @@
-package dev.wjz.betterhealthindicator.client.gui
+package com.wjz.betterhealthindicator.client.gui
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory
 import com.terraformersmc.modmenu.api.ModMenuApi

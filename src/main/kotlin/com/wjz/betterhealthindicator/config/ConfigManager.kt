@@ -1,7 +1,7 @@
-package dev.wjz.betterhealthindicator.config
+package com.wjz.betterhealthindicator.config
 
 import com.google.gson.GsonBuilder
-import dev.wjz.betterhealthindicator.BetterHealthIndicatorLogger
+import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import net.fabricmc.loader.api.FabricLoader
 import java.nio.file.Files
 import java.nio.file.Path

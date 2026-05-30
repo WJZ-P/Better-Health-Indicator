@@ -1,4 +1,4 @@
-package dev.wjz.betterhealthindicator.config
+package com.wjz.betterhealthindicator.config
 
 /** 头顶血条样式。 */
 enum class BarStyle {

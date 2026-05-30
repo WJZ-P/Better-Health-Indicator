@@ -1,4 +1,4 @@
-package dev.wjz.betterhealthindicator
+package com.wjz.betterhealthindicator
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
