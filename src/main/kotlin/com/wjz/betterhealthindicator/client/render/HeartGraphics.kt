@@ -18,6 +18,33 @@ object HeartGraphics {
 
     const val SIZE: Float = 9.0f
 
+    private fun sprite(name: String): Identifier =
+        Identifier.withDefaultNamespace("textures/gui/sprites/hud/heart/$name.png")
+
+    /**
+     * 分层爱心颜色，全部取自原版自带的异色心形精灵（无需染色/额外资源）。
+     * 顺序即叠层顺序：每满一排(20HP)进入下一层颜色，超出后循环并以 xN 文字标注。
+     */
+    enum class HeartTier(fullName: String, halfName: String) {
+        RED("full", "half"),
+        GOLD("absorbing_full", "absorbing_half"),
+        GREEN("poisoned_full", "poisoned_half"),
+        BLUE("frozen_full", "frozen_half"),
+        DARK("withered_full", "withered_half"),
+        ;
+
+        val full: Identifier = sprite(fullName)
+        val half: Identifier = sprite(halfName)
+
+        companion object {
+            /** 按叠层索引取颜色，超出调色板则循环。 */
+            fun byLayer(layer: Int): HeartTier {
+                val values = entries
+                return values[((layer % values.size) + values.size) % values.size]
+            }
+        }
+    }
+
     /** 绘制一个带颜色（含透明度）的贴图四边形，正反两面，避免背面剔除导致不可见。 */
     fun quad(consumer: VertexConsumer, matrix: Matrix4f, left: Float, top: Float, right: Float, bottom: Float, color: Int) {
         // 正面

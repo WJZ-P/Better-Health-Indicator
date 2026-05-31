@@ -3,6 +3,7 @@ package com.wjz.betterhealthindicator.client.render
 import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.rendertype.RenderTypes
+import net.minecraft.resources.Identifier
 import net.minecraft.world.phys.Vec3
 import org.joml.Quaternionf
 import java.util.Random
@@ -28,29 +29,28 @@ object HeartParticleManager {
         var vy: Double,
         var vz: Double,
         var age: Float,
-        val half: Boolean,
+        val texture: Identifier,
     )
 
     private val particles = ArrayList<Particle>()
     private val random = Random()
     private var lastNanos = 0L
 
-    fun spawn(x: Double, y: Double, z: Double, count: Int, half: Boolean) {
-        repeat(count) {
-            if (particles.size >= MAX_PARTICLES) return
-            particles.add(
-                Particle(
-                    x + (random.nextDouble() - 0.5) * 0.5,
-                    y,
-                    z + (random.nextDouble() - 0.5) * 0.5,
-                    (random.nextDouble() - 0.5) * 0.6,
-                    0.35 + random.nextDouble() * 0.35,
-                    (random.nextDouble() - 0.5) * 0.6,
-                    0.0f,
-                    half,
-                ),
-            )
-        }
+    /** 在指定世界坐标生成一颗掉落爱心粒子，贴图（含颜色）由调用方按对应爱心给定。 */
+    fun spawn(x: Double, y: Double, z: Double, texture: Identifier) {
+        if (particles.size >= MAX_PARTICLES) return
+        particles.add(
+            Particle(
+                x + (random.nextDouble() - 0.5) * 0.15,
+                y,
+                z + (random.nextDouble() - 0.5) * 0.15,
+                (random.nextDouble() - 0.5) * 0.5,
+                0.35 + random.nextDouble() * 0.35,
+                (random.nextDouble() - 0.5) * 0.5,
+                0.0f,
+                texture,
+            ),
+        )
     }
 
     /** 按帧间真实时间推进所有粒子物理，移除过期粒子。 */
@@ -89,7 +89,7 @@ object HeartParticleManager {
         for (p in particles) {
             val alpha = (255.0f * (1.0f - p.age / MAX_AGE)).toInt().coerceIn(0, 255)
             val color = (alpha shl 24) or 0xFFFFFF
-            val texture = if (p.half) HeartGraphics.HALF else HeartGraphics.FULL
+            val texture = p.texture
             poseStack.pushPose()
             try {
                 poseStack.translate(p.x - cameraPosition.x, p.y - cameraPosition.y, p.z - cameraPosition.z)

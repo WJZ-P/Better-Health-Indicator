@@ -30,6 +30,15 @@ enum class PanelCorner {
     TOP_RIGHT,
 }
 
+/** 血量到爱心数量的换算方式。 */
+enum class HealthMode {
+    /** 绝对血量：严格 1 颗心 = 2HP，心数随血量增长；高血量启用分层异色（默认）。 */
+    ABSOLUTE,
+
+    /** 相对血量：固定心数，每颗心代表等比例血量。 */
+    RELATIVE,
+}
+
 /**
  * 全部可调项集中于此，使用可变字段以便配置界面写入；通过 GSON 直接序列化为 JSON。
  */
@@ -42,6 +51,14 @@ class HealthIndicatorConfig {
     // 头顶血条
     var headBarEnabled: Boolean = true
     var barStyle: BarStyle = BarStyle.HEARTS
+    // 血量换算：绝对(默认) 严格 2HP/心；相对 固定心数按比例。
+    var healthMode: HealthMode = HealthMode.ABSOLUTE
+    // 掉血方向：true 从右往左扣（最右先空，原版一致）；false 从左往右扣。
+    var drainFromRight: Boolean = true
+    // 绝对模式下，高于一排(20HP)的血量是否启用分层异色爱心。
+    var tieredHearts: Boolean = true
+    // 相对模式固定显示的爱心数量。
+    var relativeHeartCount: Int = 10
     var showName: Boolean = true
     var showHealthText: Boolean = true
     var occludeBehindWalls: Boolean = true

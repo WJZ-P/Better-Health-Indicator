@@ -6,6 +6,7 @@ import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.BarStyle
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
 import net.minecraft.client.Minecraft
@@ -18,8 +19,8 @@ import net.minecraft.util.LightCoordsUtil
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
 import org.joml.Matrix4f
+import org.joml.Vector3f
 import kotlin.math.ceil
-import kotlin.math.roundToInt
 
 /**
  * 生物头顶血量渲染。在 26.1 的 [LevelRenderEvents.COLLECT_SUBMITS] 阶段提交几何与文本：
@@ -29,8 +30,6 @@ import kotlin.math.roundToInt
  * 同时检测生物掉血并交由 [HeartParticleManager] 生成掉落爱心粒子。
  */
 object EntityHealthBarRenderer {
-    private const val MAX_HEARTS = 10
-    private const val HEART_SPACING = 8.0f
     private const val WHITE = -1
     private const val LINE_GAP = 0.30
     private const val NAME_TAG_BACKGROUND = true
@@ -42,7 +41,28 @@ object EntityHealthBarRenderer {
         LevelRenderEvents.COLLECT_SUBMITS.register(
             LevelRenderEvents.CollectSubmits { context -> collect(context) },
         )
+        // 掉血检测属于游戏状态采样，放在固定 20Hz 的客户端 tick，避免随帧率空转，并与渲染职责分离。
+        ClientTickEvents.END_CLIENT_TICK.register(
+            ClientTickEvents.EndTick { minecraft -> tickDamageDetection(minecraft) },
+        )
         BetterHealthIndicatorLogger.info("Entity health bar renderer registered.")
+    }
+
+    /** 每客户端 tick 采样所有已加载生物的血量，检测掉血并生成爱心粒子。门控与头顶血条一致。 */
+    private fun tickDamageDetection(minecraft: Minecraft) {
+        val config = ConfigManager.config
+        if (!config.enabled || !config.headBarEnabled) return
+
+        val level = minecraft.level ?: return
+        val cameraPosition = minecraft.gameRenderer.mainCamera.position()
+
+        seenEntities.clear()
+        for (entity in level.entitiesForRendering()) {
+            if (entity !is LivingEntity) continue
+            seenEntities.add(entity.id)
+            detectDamage(entity, cameraPosition, config)
+        }
+        lastHealth.keys.retainAll(seenEntities)
     }
 
     private fun collect(context: LevelRenderContext) {
@@ -51,53 +71,65 @@ object EntityHealthBarRenderer {
 
         val minecraft = Minecraft.getInstance()
         val tickProgress = minecraft.deltaTracker.getGameTimeDeltaPartialTick(false)
-        val frame = EntitySelector.buildFrame(minecraft, config, tickProgress) ?: return
 
         val poseStack = context.poseStack()
         val collector = context.submitNodeCollector()
         val cameraState = context.levelState().cameraRenderState
+        val frame = EntitySelector.buildFrame(minecraft, config, tickProgress, cameraState.cullFrustum) ?: return
 
         HeartParticleManager.update()
-        seenEntities.clear()
 
         for (entity in frame.level.entitiesForRendering()) {
             if (entity !is LivingEntity) continue
-            seenEntities.add(entity.id)
-            detectDamage(entity, frame, config)
             if (EntitySelector.shouldShow(entity, frame)) {
                 submit(entity, frame, collector, poseStack, cameraState)
             }
         }
-        lastHealth.keys.retainAll(seenEntities)
 
         if (!HeartParticleManager.isEmpty()) {
             HeartParticleManager.render(collector, poseStack, frame.cameraPosition, cameraState.orientation)
         }
     }
 
-    /** 比较上一帧记录的血量，掉血时在血条世界位置生成下落爱心粒子。 */
-    private fun detectDamage(entity: LivingEntity, frame: EntitySelector.Frame, config: HealthIndicatorConfig) {
+    /**
+     * 比较上一 tick 记录的血量；掉血时逐槽位比对血条布局，
+     * 让每颗减少的爱心从它在血条上的确切世界位置、以它自身的颜色掉落。
+     */
+    private fun detectDamage(entity: LivingEntity, cameraPosition: Vec3, config: HealthIndicatorConfig) {
         val current = entity.health
         val previous = lastHealth.put(entity.id, current) ?: return
         if (current >= previous - 0.01f || current <= 0.0f) return
 
-        val cameraPosition = frame.cameraPosition
         if (entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z) > config.maxDistanceSquared) return
 
         val maxHealth = entity.maxHealth
         if (maxHealth <= 0.0f) return
-        val heartCount = ceil(maxHealth / 2.0f).toInt().coerceIn(1, MAX_HEARTS)
-        val hpPerHeart = maxHealth / heartCount
-        val heartsLost = ((previous - current) / hpPerHeart).roundToInt().coerceIn(1, heartCount)
 
+        val before = HeartLayout.compute(previous, maxHealth, config)
+        val after = HeartLayout.compute(current, maxHealth, config)
+        val slotCount = minOf(before.slots.size, after.slots.size)
+
+        // 与 billboarded 相同的变换：局部 (cx,0) 经相机朝向旋转 + 缩放，得到该爱心的世界坐标。
+        val cameraRotation = Minecraft.getInstance().gameRenderer.mainCamera.rotation()
+        val height = entity.bbHeight + config.yOffset
         val position = entity.position()
-        HeartParticleManager.spawn(
-            position.x,
-            position.y + entity.bbHeight + config.yOffset,
-            position.z,
-            heartsLost,
-            false,
-        )
+        val scale = config.scale
+
+        for (i in 0 until slotCount) {
+            val slotBefore = before.slots[i]
+            val lostHalves = slotBefore.topHalves - after.slots[i].topHalves
+            if (lostHalves <= 0) continue
+
+            val offset = Vector3f(-scale * slotBefore.cx, 0.0f, 0.0f)
+            cameraRotation.transform(offset)
+            val texture = if (lostHalves == 1) slotBefore.topTier.half else slotBefore.topTier.full
+            HeartParticleManager.spawn(
+                position.x + offset.x,
+                position.y + height + offset.y,
+                position.z + offset.z,
+                texture,
+            )
+        }
     }
 
     private fun submit(
@@ -119,10 +151,18 @@ object EntityHealthBarRenderer {
         val distanceSq = entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z)
         val healthRatio = (entity.health / entity.maxHealth).coerceIn(0.0f, 1.0f)
 
+        var heartMultiplier = 0
         when (config.barStyle) {
             BarStyle.BAR -> submitBar(collector, poseStack, base, barHeight, healthRatio, config)
-            BarStyle.HEARTS -> submitHearts(collector, poseStack, base, barHeight, entity.health, entity.maxHealth, config.scale)
+            BarStyle.HEARTS -> heartMultiplier =
+                submitHearts(collector, poseStack, base, barHeight, entity.health, entity.maxHealth, config)
             BarStyle.NUMERIC -> {} // 数值样式仅显示文本
+        }
+
+        if (heartMultiplier > 0) {
+            // 超出调色板层数的高血量生物，在血条上方标注「共多少管血」。
+            val text = Component.literal("x$heartMultiplier")
+            submitLabel(collector, poseStack, base, barHeight + LINE_GAP * 2, text, distanceSq, cameraState)
         }
 
         if (config.showName) {
@@ -190,6 +230,7 @@ object EntityHealthBarRenderer {
         }
     }
 
+    /** 提交头顶爱心血条，返回需要标注的「血量管数」倍数（0 表示无需标注）。 */
     private fun submitHearts(
         collector: SubmitNodeCollector,
         poseStack: PoseStack,
@@ -197,32 +238,33 @@ object EntityHealthBarRenderer {
         height: Double,
         health: Float,
         maxHealth: Float,
-        scale: Float,
-    ) {
-        val heartCount = ceil(maxHealth / 2.0f).toInt().coerceIn(1, MAX_HEARTS)
-        val hpPerHeart = maxHealth / heartCount
-        val totalWidth = heartCount * HEART_SPACING
-        val startX = -totalWidth / 2.0f
+        config: HealthIndicatorConfig,
+    ): Int {
+        val view = HeartLayout.compute(health, maxHealth, config)
         val halfSize = HeartGraphics.SIZE / 2.0f
 
-        val fulls = ArrayList<Float>()
-        val halves = ArrayList<Float>()
-        val empties = ArrayList<Float>()
-        for (i in 0 until heartCount) {
-            val heartHealth = health - i * hpPerHeart
-            val cx = startX + i * HEART_SPACING + HEART_SPACING / 2.0f
-            when {
-                heartHealth >= hpPerHeart * 0.75f -> fulls.add(cx)
-                heartHealth >= hpPerHeart * 0.25f -> halves.add(cx)
-                else -> empties.add(cx)
+        // 同贴图合并为一次几何提交；先底层后顶层，保证半心背后正确露出 container 或下层颜色。
+        val groups = LinkedHashMap<Identifier, MutableList<Float>>()
+        fun add(texture: Identifier, cx: Float) = groups.getOrPut(texture) { ArrayList() }.add(cx)
+
+        for (slot in view.slots) {
+            if (slot.top == HeartLayout.Top.FULL) continue // 满心完全遮住底层，省略
+            add(slot.baseTier?.full ?: HeartGraphics.CONTAINER, slot.cx)
+        }
+        for (slot in view.slots) {
+            when (slot.top) {
+                HeartLayout.Top.FULL -> add(slot.topTier.full, slot.cx)
+                HeartLayout.Top.HALF -> add(slot.topTier.half, slot.cx)
+                HeartLayout.Top.NONE -> {}
             }
         }
 
-        billboarded(poseStack, base, height, scale) {
-            drawHeartGroup(collector, poseStack, HeartGraphics.CONTAINER, empties, halfSize)
-            drawHeartGroup(collector, poseStack, HeartGraphics.FULL, fulls, halfSize)
-            drawHeartGroup(collector, poseStack, HeartGraphics.HALF, halves, halfSize)
+        billboarded(poseStack, base, height, config.scale) {
+            for ((texture, centers) in groups) {
+                drawHeartGroup(collector, poseStack, texture, centers, halfSize)
+            }
         }
+        return view.multiplier
     }
 
     private fun drawHeartGroup(

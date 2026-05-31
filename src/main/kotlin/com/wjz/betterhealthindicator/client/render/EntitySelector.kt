@@ -5,6 +5,7 @@ import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import net.minecraft.client.Camera
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
+import net.minecraft.client.renderer.culling.Frustum
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.projectile.ProjectileUtil
@@ -20,7 +21,7 @@ object EntitySelector {
     private const val MAX_OCCLUSION_STEPS = 8
     private const val STEP_EPSILON = 0.01
 
-    /** 每帧渲染所需的共享上下文。 */
+    /** 每帧渲染所需的共享上下文。frustum 为原版当帧视锥体，用于 ON_SCREEN 精确剔除；HUD 等无视锥场景可为 null。 */
     class Frame(
         val minecraft: Minecraft,
         val level: ClientLevel,
@@ -29,16 +30,22 @@ object EntitySelector {
         val lookedAtEntity: LivingEntity?,
         val tickProgress: Float,
         val config: HealthIndicatorConfig,
+        val frustum: Frustum?,
     )
 
-    /** 构建当帧上下文；世界或玩家不可用时返回 null。 */
-    fun buildFrame(minecraft: Minecraft, config: HealthIndicatorConfig, tickProgress: Float): Frame? {
+    /** 构建当帧上下文；世界或玩家不可用时返回 null。frustum 传原版 cameraRenderState.cullFrustum。 */
+    fun buildFrame(
+        minecraft: Minecraft,
+        config: HealthIndicatorConfig,
+        tickProgress: Float,
+        frustum: Frustum? = null,
+    ): Frame? {
         val level = minecraft.level ?: return null
         val camera = minecraft.gameRenderer.mainCamera
         // 头顶血条的 LOOKING_AT 策略与屏幕面板都需要准星目标，故二者任一启用时都做射线拾取。
         val needLookedAt = config.displayMode == DisplayMode.LOOKING_AT || config.panelEnabled
         val lookedAt = if (needLookedAt) getLookedAtEntity(minecraft, camera, config.maxDistance) else null
-        return Frame(minecraft, level, camera, camera.position(), lookedAt, tickProgress, config)
+        return Frame(minecraft, level, camera, camera.position(), lookedAt, tickProgress, config, frustum)
     }
 
     fun shouldShow(entity: LivingEntity, frame: Frame): Boolean {
@@ -47,7 +54,7 @@ object EntitySelector {
         when (frame.config.displayMode) {
             DisplayMode.ALWAYS -> {}
             DisplayMode.LOOKING_AT -> if (entity !== frame.lookedAtEntity) return false
-            DisplayMode.ON_SCREEN -> if (!isOnScreen(frame.minecraft, frame.camera, entity.getPosition(frame.tickProgress))) return false
+            DisplayMode.ON_SCREEN -> if (!isOnScreen(frame, entity)) return false
         }
 
         return true
@@ -105,15 +112,29 @@ object EntitySelector {
         return hit.entity as? LivingEntity
     }
 
-    private fun isOnScreen(minecraft: Minecraft, camera: Camera, entityPosition: Vec3): Boolean {
+    /**
+     * 是否在屏幕视野内。优先使用原版当帧视锥体（矩形视锥，精确）做剔除；
+     * 无视锥可用时（如 HUD 场景）退化为点积圆锥粗筛。
+     */
+    private fun isOnScreen(frame: Frame, entity: LivingEntity): Boolean {
+        val frustum = frame.frustum
+        if (frustum != null) {
+            // 视锥体与实体包围盒同为世界坐标；略微外扩，避免模型超出碰撞箱的部分在边缘被误剔除。
+            return frustum.isVisible(entity.boundingBox.inflate(0.25))
+        }
+        return isInViewCone(frame.camera, entity.getPosition(frame.tickProgress))
+    }
+
+    /** 点积圆锥粗筛兜底：比较视线方向与“指向实体方向”的夹角是否落在 FOV 内。 */
+    private fun isInViewCone(camera: Camera, entityPosition: Vec3): Boolean {
         val cameraPosition = camera.position()
-        val toEntity : Vec3 = entityPosition.subtract(cameraPosition)
-        val length = toEntity.length()  //  如果实体距离我们太近，除0可能有问题，直接返回true即可，在我们屏幕内。
+        val toEntity: Vec3 = entityPosition.subtract(cameraPosition)
+        val length = toEntity.length() // 实体距离太近会触发除 0，直接判定可见。
         if (length < 1.0e-4) return true
 
         val forward = camera.forwardVector()
         val dot = (forward.x() * toEntity.x + forward.y() * toEntity.y + forward.z() * toEntity.z) / length
-        val fovDegrees = minecraft.options.fov().get().toDouble()
+        val fovDegrees = Minecraft.getInstance().options.fov().get().toDouble()
         val threshold = cos(Math.toRadians(fovDegrees))
         return dot >= threshold
     }
