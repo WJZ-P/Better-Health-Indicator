@@ -128,18 +128,24 @@ object EntityHealthBarRenderer {
             val heartBottom = k * hpPerHeart
             val beforeFill = (previous - heartBottom).coerceIn(0.0f, hpPerHeart)
             val afterFill = (current - heartBottom).coerceIn(0.0f, hpPerHeart)
-            val lostHalves = halvesOf(beforeFill, hpPerHeart) - halvesOf(afterFill, hpPerHeart)
+            val afterHalves = halvesOf(afterFill, hpPerHeart)
+            val lostHalves = halvesOf(beforeFill, hpPerHeart) - afterHalves
             if (lostHalves <= 0) continue
 
             val ref = HeartLayout.heartRefAt(heartBottom + hpPerHeart * 0.5f, maxHealth, config)
             val offset = Vector3f(-scale * ref.cx, 0.0f, 0.0f)
             cameraRotation.transform(offset)
-            val texture = if (lostHalves >= 2) ref.tier.full else ref.tier.half
+            val isHalf = lostHalves < 2
+            val texture = if (isHalf) ref.tier.half else ref.tier.full
+            // 掉落的是"被打掉的那半边"，与血条上保留的半心相反。
+            // drainFromRight 下：满→半 掉右半(flipU=false)，半→空 掉左半(flipU=true)。
+            val flipU = isHalf && (if (config.drainFromRight) afterHalves == 0 else afterHalves == 1)
             HeartParticleManager.spawn(
                 position.x + offset.x,
                 position.y + height + offset.y,
                 position.z + offset.z,
                 texture,
+                flipU,
             )
             spawned++
         }

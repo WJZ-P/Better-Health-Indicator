@@ -30,14 +30,18 @@ object HeartParticleManager {
         var vz: Double,
         var age: Float,
         val texture: Identifier,
+        val flipU: Boolean,
     )
 
     private val particles = ArrayList<Particle>()
     private val random = Random()
     private var lastNanos = 0L
 
-    /** 在指定世界坐标生成一颗掉落爱心粒子，贴图（含颜色）由调用方按对应爱心给定。 */
-    fun spawn(x: Double, y: Double, z: Double, texture: Identifier) {
+    /**
+     * 在指定世界坐标生成一颗掉落爱心粒子，贴图（含颜色）由调用方按对应爱心给定。
+     * @param flipU 半心翻转填充侧，与血条上的半心保持一致（满心对称，传入无影响）。
+     */
+    fun spawn(x: Double, y: Double, z: Double, texture: Identifier, flipU: Boolean) {
         if (particles.size >= MAX_PARTICLES) return
         particles.add(
             Particle(
@@ -49,6 +53,7 @@ object HeartParticleManager {
                 (random.nextDouble() - 0.5) * 0.5,
                 0.0f,
                 texture,
+                flipU,
             ),
         )
     }
@@ -96,7 +101,7 @@ object HeartParticleManager {
                 poseStack.mulPose(cameraOrientation)
                 poseStack.scale(-SCALE, -SCALE, SCALE)
                 collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(texture)) { pose, consumer ->
-                    HeartGraphics.quad(consumer, pose.pose(), -halfSize, -halfSize, halfSize, halfSize, color)
+                    HeartGraphics.quad(consumer, pose.pose(), -halfSize, -halfSize, halfSize, halfSize, color, p.flipU)
                 }
             } finally {
                 poseStack.popPose()
