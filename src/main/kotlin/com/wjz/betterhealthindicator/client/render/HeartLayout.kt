@@ -3,11 +3,15 @@ package com.wjz.betterhealthindicator.client.render
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import com.wjz.betterhealthindicator.config.HealthMode
 import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * 爱心血条的布局与状态计算，是头顶渲染与掉血粒子的唯一真相源。
  *
  * 两者共用同一套槽位（位置 + 顶层填充 + 分层颜色），从而保证「掉落的那颗心」与「血条上那颗心」精确对齐。
+ *
+ * 注意坐标镜像：渲染走 billboard 的 scale(-x)，局部 +X 会映射到屏幕左侧。
+ * 因此 [cxFor] 在 drainFromRight 时把逻辑 0（最后清空的满心）放到最大 cx，使其显示在屏幕最左，达成「从右往左扣」。
  */
 object HeartLayout {
     const val HEARTS_PER_ROW = 10
@@ -34,25 +38,41 @@ object HeartLayout {
         val baseTier: HeartGraphics.HeartTier?,
         val top: Top,
         val topTier: HeartGraphics.HeartTier,
-    ) {
-        /** 顶层填充的半心数：FULL=2、HALF=1、NONE=0。用于粒子差异比较。 */
-        val topHalves: Int get() = when (top) {
-            Top.FULL -> 2
-            Top.HALF -> 1
-            Top.NONE -> 0
-        }
-    }
+    )
+
+    /** 一颗心的视觉位置与颜色，供掉血粒子按血量定位取色。 */
+    class HeartRef(val cx: Float, val tier: HeartGraphics.HeartTier)
 
     /**
-     * @param slots 槽位列表，下标即逻辑序号（与掉血方向无关，便于前后帧逐位比较）
+     * @param slots 槽位列表
      * @param multiplier >paletteSize 层时显示的 xN 倍数；为 0 表示不显示
      */
     class View(val slots: List<Slot>, val multiplier: Int)
 
-    fun compute(health: Float, maxHealth: Float, config: HealthIndicatorConfig): View {
-        val tiered = config.healthMode == HealthMode.ABSOLUTE && config.tieredHearts && maxHealth > LAYER_HP
-        return if (tiered) computeTiered(health, maxHealth, config) else computeFlat(health, maxHealth, config)
+    private fun isTiered(maxHealth: Float, config: HealthIndicatorConfig): Boolean =
+        config.healthMode == HealthMode.ABSOLUTE && config.tieredHearts && maxHealth > LAYER_HP
+
+    private fun flatHeartCount(maxHealth: Float, config: HealthIndicatorConfig): Int = when (config.healthMode) {
+        HealthMode.RELATIVE -> config.relativeHeartCount.coerceIn(1, HEARTS_PER_ROW)
+        HealthMode.ABSOLUTE -> ceil(maxHealth / HP_PER_HEART).toInt().coerceIn(1, HEARTS_PER_ROW)
     }
+
+    /** 每颗心代表的血量。绝对分层恒为 2HP；其余按固定心数均摊。 */
+    fun hpPerHeart(maxHealth: Float, config: HealthIndicatorConfig): Float =
+        if (isTiered(maxHealth, config)) HP_PER_HEART else maxHealth / flatHeartCount(maxHealth, config)
+
+    /**
+     * 逻辑序号 → 槽位中心 X。逻辑 0 表示「最先填满 / 最后清空」的那颗心。
+     * 因渲染镜像，drainFromRight 时逻辑 0 置于最大 cx（屏幕最左），右侧的高逻辑序号先清空。
+     */
+    fun cxFor(logical: Int, heartCount: Int, drainFromRight: Boolean): Float {
+        val startX = -heartCount * SPACING / 2.0f
+        val physical = if (drainFromRight) heartCount - 1 - logical else logical
+        return startX + physical * SPACING + SPACING / 2.0f
+    }
+
+    fun compute(health: Float, maxHealth: Float, config: HealthIndicatorConfig): View =
+        if (isTiered(maxHealth, config)) computeTiered(health, maxHealth, config) else computeFlat(health, maxHealth, config)
 
     /** 分层异色：固定一排，每满 20HP 进入下一层颜色，空出的顶层揭示下一层满心而非黑底。 */
     private fun computeTiered(health: Float, maxHealth: Float, config: HealthIndicatorConfig): View {
@@ -73,10 +93,7 @@ object HeartLayout {
 
     /** 不分层：相对模式按固定心数等比例；绝对模式按 2HP/心（>20HP 时压缩）。单层红心、黑底。 */
     private fun computeFlat(health: Float, maxHealth: Float, config: HealthIndicatorConfig): View {
-        val heartCount = when (config.healthMode) {
-            HealthMode.RELATIVE -> config.relativeHeartCount.coerceIn(1, HEARTS_PER_ROW)
-            HealthMode.ABSOLUTE -> ceil(maxHealth / HP_PER_HEART).toInt().coerceIn(1, HEARTS_PER_ROW)
-        }
+        val heartCount = flatHeartCount(maxHealth, config)
         val hpPerHeart = maxHealth / heartCount
 
         val slots = buildSlots(heartCount, config.drainFromRight) { logical ->
@@ -86,31 +103,39 @@ object HeartLayout {
         return View(slots, 0)
     }
 
-    /** 按某颗心可用血量与每心血量，判定其顶层填充状态。 */
-    private fun fillFor(remainder: Float, hpPerHeart: Float): Top = when {
+    /**
+     * 给定从 0 起算的血量值，返回该血量所落在的那颗心的视觉位置与颜色。
+     * 用于掉血粒子：按绝对血量逐心采样，天然跨层取到正确的分层颜色。
+     */
+    fun heartRefAt(hp: Float, maxHealth: Float, config: HealthIndicatorConfig): HeartRef {
+        if (isTiered(maxHealth, config)) {
+            val layer = floor(hp / LAYER_HP).toInt().coerceAtLeast(0)
+            val hpInLayer = hp - layer * LAYER_HP
+            val logical = floor(hpInLayer / HP_PER_HEART).toInt().coerceIn(0, HEARTS_PER_ROW - 1)
+            return HeartRef(cxFor(logical, HEARTS_PER_ROW, config.drainFromRight), HeartGraphics.HeartTier.byLayer(layer))
+        }
+        val heartCount = flatHeartCount(maxHealth, config)
+        val hpPer = maxHealth / heartCount
+        val logical = floor(hp / hpPer).toInt().coerceIn(0, heartCount - 1)
+        return HeartRef(cxFor(logical, heartCount, config.drainFromRight), HeartGraphics.HeartTier.RED)
+    }
+
+    /** 顶层填充状态判定（也用于粒子的整/半判定）。 */
+    fun fillFor(remainder: Float, hpPerHeart: Float): Top = when {
         remainder >= hpPerHeart * 0.75f -> Top.FULL
         remainder >= hpPerHeart * 0.25f -> Top.HALF
         else -> Top.NONE
     }
 
-    /**
-     * 生成槽位。逻辑序号 0 表示「最先填满 / 最后清空」的那颗心。
-     * drainFromRight=true 时逻辑 0 在最左（最右先空，原版一致）；false 时逻辑 0 在最右。
-     */
     private inline fun buildSlots(
         heartCount: Int,
         drainFromRight: Boolean,
         info: (logical: Int) -> Triple<Top, HeartGraphics.HeartTier, HeartGraphics.HeartTier?>,
     ): List<Slot> {
-        val totalWidth = heartCount * SPACING
-        val startX = -totalWidth / 2.0f
-        val half = SPACING / 2.0f
         val list = ArrayList<Slot>(heartCount)
         for (logical in 0 until heartCount) {
-            val physical = if (drainFromRight) logical else heartCount - 1 - logical
-            val cx = startX + physical * SPACING + half
             val (top, topTier, baseTier) = info(logical)
-            list.add(Slot(cx, baseTier, top, topTier))
+            list.add(Slot(cxFor(logical, heartCount, drainFromRight), baseTier, top, topTier))
         }
         return list
     }

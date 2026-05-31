@@ -107,13 +107,13 @@ object HealthPanelHud {
             renderState.bodyRot = 180.0f + modelYaw
             renderState.yRot = modelYaw
             renderState.xRot = if (renderState.pose != Pose.FALL_FLYING) MODEL_PITCH else 0.0f
-            renderState.boundingBoxWidth = renderState.boundingBoxWidth / renderState.scale
-            renderState.boundingBoxHeight = renderState.boundingBoxHeight / renderState.scale
+            renderState.boundingBoxWidth /= renderState.scale
+            renderState.boundingBoxHeight /= renderState.scale
             renderState.scale = 1.0f
         }
 
         val boxHeight = (y1 - y0).toFloat()
-        val size = (boxHeight * 0.85f / entity.bbHeight.coerceAtLeast(0.6f)).coerceIn(5.0f, 45.0f)
+        val size = (boxHeight * 0.65f / entity.bbHeight.coerceAtLeast(0.6f)).coerceIn(5.0f, 45.0f)
         val translation = Vector3f(0.0f, renderState.boundingBoxHeight / 2.0f + 0.0625f, 0.0f)
         val rotation = Quaternionf().rotateZ(Math.PI.toFloat())
         val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Math.PI.toFloat() / 180.0f))

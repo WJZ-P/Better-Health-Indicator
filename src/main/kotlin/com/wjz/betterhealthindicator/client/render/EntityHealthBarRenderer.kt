@@ -21,6 +21,7 @@ import net.minecraft.world.phys.Vec3
 import org.joml.Matrix4f
 import org.joml.Vector3f
 import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * 生物头顶血量渲染。在 26.1 的 [LevelRenderEvents.COLLECT_SUBMITS] 阶段提交几何与文本：
@@ -33,6 +34,7 @@ object EntityHealthBarRenderer {
     private const val WHITE = -1
     private const val LINE_GAP = 0.30
     private const val NAME_TAG_BACKGROUND = true
+    private const val MAX_PARTICLE_BURST = 20
 
     private val lastHealth = HashMap<Int, Float>()
     private val seenEntities = HashSet<Int>()
@@ -92,8 +94,11 @@ object EntityHealthBarRenderer {
     }
 
     /**
-     * 比较上一 tick 记录的血量；掉血时逐槽位比对血条布局，
-     * 让每颗减少的爱心从它在血条上的确切世界位置、以它自身的颜色掉落。
+     * 比较上一 tick 记录的血量；掉血时按「绝对血量逐心」遍历受影响的爱心，
+     * 让每颗减少的心从它在血条上的确切世界位置、以它自身（分层）的颜色掉落。
+     *
+     * 逐心（而非逐槽位）遍历可天然跨越分层边界：每颗心按其所在血量区间采样颜色，
+     * 因此即便一次伤害跨越两种颜色，也能正确生成对应颜色的粒子。
      */
     private fun detectDamage(entity: LivingEntity, cameraPosition: Vec3, config: HealthIndicatorConfig) {
         val current = entity.health
@@ -105,31 +110,46 @@ object EntityHealthBarRenderer {
         val maxHealth = entity.maxHealth
         if (maxHealth <= 0.0f) return
 
-        val before = HeartLayout.compute(previous, maxHealth, config)
-        val after = HeartLayout.compute(current, maxHealth, config)
-        val slotCount = minOf(before.slots.size, after.slots.size)
+        val hpPerHeart = HeartLayout.hpPerHeart(maxHealth, config)
+        if (hpPerHeart <= 0.0f) return
 
-        // 与 billboarded 相同的变换：局部 (cx,0) 经相机朝向旋转 + 缩放，得到该爱心的世界坐标。
+        // 与 billboard 相同的变换：局部 (cx,0) 经相机朝向旋转 + 缩放，得到该爱心的世界坐标。
         val cameraRotation = Minecraft.getInstance().gameRenderer.mainCamera.rotation()
         val height = entity.bbHeight + config.yOffset
         val position = entity.position()
         val scale = config.scale
 
-        for (i in 0 until slotCount) {
-            val slotBefore = before.slots[i]
-            val lostHalves = slotBefore.topHalves - after.slots[i].topHalves
+        // 遍历血量区间内被触及的每颗心：心 k 占据 [k*hpPerHeart, (k+1)*hpPerHeart)。
+        val firstHeart = floor(current / hpPerHeart).toInt().coerceAtLeast(0)
+        val lastHeart = ceil(previous / hpPerHeart).toInt() - 1
+        var spawned = 0
+        for (k in firstHeart..lastHeart) {
+            if (spawned >= MAX_PARTICLE_BURST) break
+            val heartBottom = k * hpPerHeart
+            val beforeFill = (previous - heartBottom).coerceIn(0.0f, hpPerHeart)
+            val afterFill = (current - heartBottom).coerceIn(0.0f, hpPerHeart)
+            val lostHalves = halvesOf(beforeFill, hpPerHeart) - halvesOf(afterFill, hpPerHeart)
             if (lostHalves <= 0) continue
 
-            val offset = Vector3f(-scale * slotBefore.cx, 0.0f, 0.0f)
+            val ref = HeartLayout.heartRefAt(heartBottom + hpPerHeart * 0.5f, maxHealth, config)
+            val offset = Vector3f(-scale * ref.cx, 0.0f, 0.0f)
             cameraRotation.transform(offset)
-            val texture = if (lostHalves == 1) slotBefore.topTier.half else slotBefore.topTier.full
+            val texture = if (lostHalves >= 2) ref.tier.full else ref.tier.half
             HeartParticleManager.spawn(
                 position.x + offset.x,
                 position.y + height + offset.y,
                 position.z + offset.z,
                 texture,
             )
+            spawned++
         }
+    }
+
+    /** 某颗心当前填充对应的半心数（0/1/2），阈值与渲染填充判定保持一致。 */
+    private fun halvesOf(fill: Float, hpPerHeart: Float): Int = when (HeartLayout.fillFor(fill, hpPerHeart)) {
+        HeartLayout.Top.FULL -> 2
+        HeartLayout.Top.HALF -> 1
+        HeartLayout.Top.NONE -> 0
     }
 
     private fun submit(
@@ -220,7 +240,7 @@ object EntityHealthBarRenderer {
         val fillRight = left + width * healthRatio
         val border = 1.0f
 
-        billboarded(poseStack, base, height, config.scale) {
+        billboard(poseStack, base, height, config.scale) {
             collector.submitCustomGeometry(poseStack, RenderTypes.debugQuads()) { pose, consumer ->
                 val m = pose.pose()
                 solidQuad(consumer, m, left - border, top - border, right + border, bottom + border, config.borderColor)
@@ -259,9 +279,11 @@ object EntityHealthBarRenderer {
             }
         }
 
-        billboarded(poseStack, base, height, config.scale) {
+        billboard(poseStack, base, height, config.scale) {
             for ((texture, centers) in groups) {
-                drawHeartGroup(collector, poseStack, texture, centers, halfSize)
+                // 半心按掉血方向翻转填充侧：从右往左扣时填充左半边。
+                val flipU = config.drainFromRight && HeartGraphics.isHalfTexture(texture)
+                drawHeartGroup(collector, poseStack, texture, centers, halfSize, flipU)
             }
         }
         return view.multiplier
@@ -273,17 +295,18 @@ object EntityHealthBarRenderer {
         texture: Identifier,
         centers: List<Float>,
         halfSize: Float,
+        flipU: Boolean,
     ) {
         if (centers.isEmpty()) return
         collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture)) { pose, consumer ->
             val m = pose.pose()
             for (cx in centers) {
-                HeartGraphics.quad(consumer, m, cx - halfSize, -halfSize, cx + halfSize, halfSize, WHITE)
+                HeartGraphics.quad(consumer, m, cx - halfSize, -halfSize, cx + halfSize, halfSize, WHITE, flipU)
             }
         }
     }
 
-    private inline fun billboarded(poseStack: PoseStack, base: Vec3, height: Double, scale: Float, block: () -> Unit) {
+    private inline fun billboard(poseStack: PoseStack, base: Vec3, height: Double, scale: Float, block: () -> Unit) {
         poseStack.pushPose()
         try {
             poseStack.translate(base.x, base.y + height, base.z)
