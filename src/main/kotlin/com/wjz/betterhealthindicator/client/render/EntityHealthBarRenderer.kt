@@ -36,8 +36,25 @@ object EntityHealthBarRenderer {
     private const val NAME_TAG_BACKGROUND = true
     private const val MAX_PARTICLE_BURST = 20
 
+    // 爱心相对 container 朝相机方向的“深度偏移量”，按世界单位/每格距离取值（模拟 polygon offset）。
+    // 固定的局部 z 偏移会让偏离屏幕中心的心产生横向投影位移（越靠边越大 → 整排被剪切成斜的，即“歪”）；
+    // 让世界偏移随距离成正比后，屏幕上的横向剪切恒定且亚像素（看不出歪），而深度差随距离增大，远处也不会 z-fighting。
+    // 仅用于打破与 container 的共面平局，故取很小的值即可。
+    private const val HEART_DEPTH_BIAS = 0.0015
+
     private val lastHealth = HashMap<Int, Float>()
     private val seenEntities = HashSet<Int>()
+
+    // 本 tick 检测到的待生成粒子：仅记录爱心局部信息，世界坐标推迟到渲染帧解析（见 flushPendingSpawns）。
+    private class PendingSpawn(
+        val entity: LivingEntity,
+        val cx: Float,
+        val texture: Identifier,
+        val flipU: Boolean,
+        val style: HeartParticleManager.ParticleStyle,
+    )
+
+    private val pendingSpawns = ArrayList<PendingSpawn>()
 
     fun register() {
         LevelRenderEvents.COLLECT_SUBMITS.register(
@@ -65,6 +82,11 @@ object EntityHealthBarRenderer {
             detectDamage(entity, cameraPosition, config)
         }
         lastHealth.keys.retainAll(seenEntities)
+
+        // 与原版粒子一致，物理按客户端 tick 定步推进；世界冻结（/tick freeze）时不推进。
+        if (level.tickRateManager().runsNormally()) {
+            HeartParticleManager.tick()
+        }
     }
 
     private fun collect(context: LevelRenderContext) {
@@ -74,12 +96,13 @@ object EntityHealthBarRenderer {
         val minecraft = Minecraft.getInstance()
         val tickProgress = minecraft.deltaTracker.getGameTimeDeltaPartialTick(false)
 
+        // 在渲染帧解析本 tick 的待生成粒子，确保与血条爱心同基准、同帧、像素级重合（须先于可能的提前返回执行，避免堆积）。
+        flushPendingSpawns(minecraft, config, tickProgress)
+
         val poseStack = context.poseStack()
         val collector = context.submitNodeCollector()
         val cameraState = context.levelState().cameraRenderState
         val frame = EntitySelector.buildFrame(minecraft, config, tickProgress, cameraState.cullFrustum) ?: return
-
-        HeartParticleManager.update()
 
         for (entity in frame.level.entitiesForRendering()) {
             if (entity !is LivingEntity) continue
@@ -89,7 +112,7 @@ object EntityHealthBarRenderer {
         }
 
         if (!HeartParticleManager.isEmpty()) {
-            HeartParticleManager.render(collector, poseStack, frame.cameraPosition, cameraState.orientation)
+            HeartParticleManager.render(collector, poseStack, frame.cameraPosition, cameraState.orientation, tickProgress)
         }
     }
 
@@ -113,11 +136,13 @@ object EntityHealthBarRenderer {
         val hpPerHeart = HeartLayout.hpPerHeart(maxHealth, config)
         if (hpPerHeart <= 0.0f) return
 
-        // 与 billboard 相同的变换：局部 (cx,0) 经相机朝向旋转 + 缩放，得到该爱心的世界坐标。
-        val cameraRotation = Minecraft.getInstance().gameRenderer.mainCamera.rotation()
-        val height = entity.bbHeight + config.yOffset
-        val position = entity.position()
-        val scale = config.scale
+        // 本次总伤害决定整批粒子的掉落档次（轻/中/重）。
+        val style = HeartParticleManager.styleFor(
+            previous - current,
+            config.particleMediumDamage.toFloat(),
+            config.particleHeavyDamage.toFloat(),
+            config.particleShakeScale.toFloat(),
+        )
 
         // 遍历血量区间内被触及的每颗心：心 k 占据 [k*hpPerHeart, (k+1)*hpPerHeart)。
         val firstHeart = floor(current / hpPerHeart).toInt().coerceAtLeast(0)
@@ -133,22 +158,42 @@ object EntityHealthBarRenderer {
             if (lostHalves <= 0) continue
 
             val ref = HeartLayout.heartRefAt(heartBottom + hpPerHeart * 0.5f, maxHealth, config)
-            val offset = Vector3f(-scale * ref.cx, 0.0f, 0.0f)
-            cameraRotation.transform(offset)
             val isHalf = lostHalves < 2
             val texture = if (isHalf) ref.tier.half else ref.tier.full
             // 掉落的是"被打掉的那半边"，与血条上保留的半心相反。
             // drainFromRight 下：满→半 掉右半(flipU=false)，半→空 掉左半(flipU=true)。
             val flipU = isHalf && (if (config.drainFromRight) afterHalves == 0 else afterHalves == 1)
+            // 仅登记“待生成”，世界坐标推迟到渲染帧按血条爱心的同一基准解析，确保像素级重合、无缝衔接。
+            pendingSpawns.add(PendingSpawn(entity, ref.cx, texture, flipU, style))
+            spawned++
+        }
+    }
+
+    /**
+     * 把本 tick 登记的待生成粒子，按与血条爱心**完全相同的基准**解析为世界坐标后真正生成。
+     *
+     * 在渲染帧调用：复用血条爱心的插值位置 [LivingEntity.getPosition] 与同一相机朝向、缩放、高度，
+     * 使粒子诞生位置与血条上那颗爱心像素级重合，且与掉血处于同一帧、无缝衔接。
+     */
+    private fun flushPendingSpawns(minecraft: Minecraft, config: HealthIndicatorConfig, tickProgress: Float) {
+        if (pendingSpawns.isEmpty()) return
+        val rotation = minecraft.gameRenderer.mainCamera.rotation()
+        for (pending in pendingSpawns) {
+            val entity = pending.entity
+            val position = entity.getPosition(tickProgress)
+            val height = entity.bbHeight + config.yOffset
+            val offset = Vector3f(-config.scale * pending.cx, 0.0f, 0.0f)
+            rotation.transform(offset)
             HeartParticleManager.spawn(
                 position.x + offset.x,
                 position.y + height + offset.y,
                 position.z + offset.z,
-                texture,
-                flipU,
+                pending.texture,
+                pending.flipU,
+                pending.style,
             )
-            spawned++
         }
+        pendingSpawns.clear()
     }
 
     /** 某颗心当前填充对应的半心数（0/1/2），阈值与渲染填充判定保持一致。 */
@@ -269,36 +314,62 @@ object EntityHealthBarRenderer {
         val view = HeartLayout.compute(health, maxHealth, config)
         val halfSize = HeartGraphics.SIZE / 2.0f
 
-        // 同贴图合并为一次几何提交；按 容器→下层色→顶层 顺序入组（先入先画=在下层），保证描边与分层正确叠放。
-        val groups = LinkedHashMap<Identifier, MutableList<Float>>()
-        fun add(texture: Identifier, cx: Float) = groups.getOrPut(texture) { ArrayList() }.add(cx)
+        // 只有两层：container 背板 + 每槽位“自己算出的那一张爱心”，避免把所有层无脑叠上去（更省、且无多色重影）。
+        // 跨贴图是独立 submitCustomGeometry 调用、绘制顺序不保证，故仍给爱心层一个比 container 更靠近相机的深度，
+        // 由深度测试稳定压在 container 之上（仅 1 步，近距离视差≈黑色描边，不会再像三层那样糊成一片）。
+        val containerLayer = LinkedHashMap<Identifier, MutableList<Float>>()
+        val heartLayer = LinkedHashMap<Identifier, MutableList<Float>>()
+        // 边界半心若有下层颜色：需在半心下垫一张“下层满心”露出空缺侧颜色，单独再高一步避免与半心共面。
+        val halfRevealTop = LinkedHashMap<Identifier, MutableList<Float>>()
+        fun add(map: LinkedHashMap<Identifier, MutableList<Float>>, texture: Identifier, cx: Float) =
+            map.getOrPut(texture) { ArrayList() }.add(cx)
 
-        // 最底层：所有槽位都垫一张 container（比爱心大一圈），统一作为黑色描边背板——满心也需要，否则丢描边。
         for (slot in view.slots) {
-            add(HeartGraphics.CONTAINER, slot.cx)
-        }
-        // 中间层：分层异色时被揭示的下层满心颜色，盖住 container 中心、四周留出描边。
-        for (slot in view.slots) {
-            val baseTier = slot.baseTier ?: continue
-            add(baseTier.full, slot.cx)
-        }
-        // 顶层：本槽位当前层爱心（满/半）；半心或空心处自然露出其下的下层色或 container。
-        for (slot in view.slots) {
+            add(containerLayer, HeartGraphics.CONTAINER, slot.cx)
             when (slot.top) {
-                HeartLayout.Top.FULL -> add(slot.topTier.full, slot.cx)
-                HeartLayout.Top.HALF -> add(slot.topTier.half, slot.cx)
-                HeartLayout.Top.NONE -> {}
+                // 满心：直接画当前层满心（不再叠下层色，下层被完全遮挡、画了纯属浪费且会重影）。
+                HeartLayout.Top.FULL -> add(heartLayer, slot.topTier.full, slot.cx)
+                // 空缺：有下层则露出下层满心颜色；无下层就只剩 container（黑底）。
+                HeartLayout.Top.NONE -> slot.baseTier?.let { add(heartLayer, it.full, slot.cx) }
+                // 半心：有下层时先在 heartLayer 垫下层满心填充空缺侧，再把当前层半心叠到更靠前一步。
+                HeartLayout.Top.HALF -> {
+                    if (slot.baseTier != null) {
+                        add(heartLayer, slot.baseTier.full, slot.cx)
+                        add(halfRevealTop, slot.topTier.half, slot.cx)
+                    } else {
+                        add(heartLayer, slot.topTier.half, slot.cx)
+                    }
+                }
             }
         }
+
+        // 把“世界深度偏移”换算为 billboard 局部 z：billboard 会以 config.scale 缩放局部坐标，故局部 z = 世界偏移 / scale。
+        // 世界偏移 = HEART_DEPTH_BIAS × 距离，从而屏幕剪切恒定（亚像素）、深度差随距离自适应。
+        val distance = base.length().toFloat()
+        val scale = config.scale.coerceAtLeast(1.0e-4f)
+        val zStep = (HEART_DEPTH_BIAS.toFloat() * distance) / scale
 
         billboard(poseStack, base, height, config.scale) {
-            for ((texture, centers) in groups) {
-                // 半心按掉血方向翻转填充侧：从右往左扣时填充左半边。
-                val flipU = config.drainFromRight && HeartGraphics.isHalfTexture(texture)
-                drawHeartGroup(collector, poseStack, texture, centers, halfSize, flipU)
-            }
+            drawHeartLayer(collector, poseStack, containerLayer, halfSize, config, 0.0f)
+            drawHeartLayer(collector, poseStack, heartLayer, halfSize, config, zStep)
+            drawHeartLayer(collector, poseStack, halfRevealTop, halfSize, config, zStep * 2.0f)
         }
         return view.multiplier
+    }
+
+    private fun drawHeartLayer(
+        collector: SubmitNodeCollector,
+        poseStack: PoseStack,
+        groups: Map<Identifier, MutableList<Float>>,
+        halfSize: Float,
+        config: HealthIndicatorConfig,
+        z: Float,
+    ) {
+        for ((texture, centers) in groups) {
+            // 半心按掉血方向翻转填充侧：从右往左扣时填充左半边。
+            val flipU = config.drainFromRight && HeartGraphics.isHalfTexture(texture)
+            drawHeartGroup(collector, poseStack, texture, centers, halfSize, flipU, z)
+        }
     }
 
     private fun drawHeartGroup(
@@ -308,12 +379,13 @@ object EntityHealthBarRenderer {
         centers: List<Float>,
         halfSize: Float,
         flipU: Boolean,
+        z: Float,
     ) {
         if (centers.isEmpty()) return
         collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture)) { pose, consumer ->
             val m = pose.pose()
             for (cx in centers) {
-                HeartGraphics.quad(consumer, m, cx - halfSize, -halfSize, cx + halfSize, halfSize, WHITE, flipU)
+                HeartGraphics.quad(consumer, m, cx - halfSize, -halfSize, cx + halfSize, halfSize, WHITE, flipU, z)
             }
         }
     }

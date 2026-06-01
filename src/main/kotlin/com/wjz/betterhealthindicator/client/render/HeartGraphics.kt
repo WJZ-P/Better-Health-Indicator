@@ -64,17 +64,18 @@ object HeartGraphics {
         bottom: Float,
         color: Int,
         flipU: Boolean = false,
+        z: Float = 0.0f,
     ) {
         val uLeft = if (flipU) 1.0f else 0.0f
         val uRight = if (flipU) 0.0f else 1.0f
-        vertex(consumer, matrix, left, bottom, uLeft, 1.0f, color)
-        vertex(consumer, matrix, right, bottom, uRight, 1.0f, color)
-        vertex(consumer, matrix, right, top, uRight, 0.0f, color)
-        vertex(consumer, matrix, left, top, uLeft, 0.0f, color)
+        vertex(consumer, matrix, left, bottom, uLeft, 1.0f, color, z)
+        vertex(consumer, matrix, right, bottom, uRight, 1.0f, color, z)
+        vertex(consumer, matrix, right, top, uRight, 0.0f, color, z)
+        vertex(consumer, matrix, left, top, uLeft, 0.0f, color, z)
     }
 
-    private fun vertex(consumer: VertexConsumer, matrix: Matrix4f, x: Float, y: Float, u: Float, v: Float, color: Int) {
-        consumer.addVertex(matrix, x, y, 0.0f)
+    private fun vertex(consumer: VertexConsumer, matrix: Matrix4f, x: Float, y: Float, u: Float, v: Float, color: Int, z: Float) {
+        consumer.addVertex(matrix, x, y, z)
             .setColor(color)
             .setUv(u, v)
             .setOverlay(OverlayTexture.NO_OVERLAY)
