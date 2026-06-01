@@ -7,6 +7,7 @@ import net.minecraft.resources.Identifier
 import net.minecraft.world.phys.Vec3
 import org.joml.Quaternionf
 import java.util.Random
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.sin
 
@@ -24,6 +25,7 @@ import kotlin.math.sin
 object HeartParticleManager {
     // 物理量按“每 tick”语义取值（1 tick = 1/20 s）。
     private const val GRAVITY = 0.0045 // 每 tick 对竖直速度的衰减（已放缓，掉落更轻盈）
+    private const val HORIZONTAL_DRAG = 0.9 // 横向速度每 tick 的保留比例：出生爆发逸散后迅速减速、平稳下落
     private const val MAX_AGE_TICKS = 28 // 约 1.4s
     private const val FADE_TICKS = 5 // 末尾 0.25s 才开始淡出（其余时间不透明，契合像素观感）
     private const val SCALE = 0.025f
@@ -42,12 +44,14 @@ object HeartParticleManager {
     /**
      * 粒子掉落/晃动风格，按伤害分档。
      * @param springScale 弹起初速倍率（越大弹得越高）。
+     * @param spread 出生瞬间向四周爆发逸散的横向初速（格/tick 量级），越大炸得越开。
      * @param swayAmp 横向摆动幅度（占爱心宽度比例）。
      * @param tiltDeg 倾斜摆动幅度（度）。
      * @param jitterAmp 高频抖动幅度（占爱心宽度比例，仅重档 > 0）。
      */
     class ParticleStyle(
         val springScale: Float,
+        val spread: Float,
         val swayAmp: Float,
         val tiltDeg: Float,
         val jitterAmp: Float,
@@ -55,17 +59,17 @@ object HeartParticleManager {
 
     /**
      * 按本次总伤害选择掉落风格：
-     * - 轻档（< medium）：轻微晃动；
-     * - 中档（[medium, heavy]）：中等幅度晃动；
-     * - 重档（> heavy）：加大弹簧 + 叠加高频抖动，体感震撼。
-     * @param shakeScale 全局抖动幅度倍率（仅缩放 sway/tilt/jitter，不改变弹起高度）。
+     * - 轻档（< medium）：轻微逸散、轻微晃动；
+     * - 中档（[medium, heavy]）：中等逸散、中等晃动；
+     * - 重档（> heavy）：大幅爆裂逸散 + 加大弹簧 + 叠加高频抖动，体感震撼。
+     * @param shakeScale 全局抖动幅度倍率（缩放 spread/sway/tilt/jitter，不改变弹起高度）。
      */
     fun styleFor(damage: Float, medium: Float, heavy: Float, shakeScale: Float): ParticleStyle {
         val s = shakeScale.coerceAtLeast(0.0f)
         return when {
-            damage > heavy -> ParticleStyle(1.7f, 0.46f * s, 28.0f * s, 0.14f * s)
-            damage >= medium -> ParticleStyle(1.3f, 0.30f * s, 17.0f * s, 0.0f)
-            else -> ParticleStyle(1.0f, 0.16f * s, 9.0f * s, 0.0f)
+            damage > heavy -> ParticleStyle(1.7f, 0.20f * s, 0.46f * s, 28.0f * s, 0.14f * s)
+            damage >= medium -> ParticleStyle(1.3f, 0.12f * s, 0.14f * s, 9.0f * s, 0.0f)
+            else -> ParticleStyle(1.0f, 0.08f * s, 0.07f * s, 5.0f * s, 0.0f)
         }
     }
 
@@ -97,16 +101,40 @@ object HeartParticleManager {
      * 初始位置即给定坐标（不再随机散开），确保与血条上那颗爱心像素级重合。
      * @param flipU 半心翻转填充侧，与血条上的半心保持一致（满心对称，传入无影响）。
      */
-    fun spawn(x: Double, y: Double, z: Double, texture: Identifier, flipU: Boolean, style: ParticleStyle) {
+    /**
+     * @param biasX,biasZ 横向逸散的方向偏置（世界水平单位向量 × 方向）；
+     *        半心传入“被打掉那侧”的方向，使其主要朝该侧飞；满心传 0 表示无偏置、四散。
+     */
+    fun spawn(
+        x: Double,
+        y: Double,
+        z: Double,
+        texture: Identifier,
+        flipU: Boolean,
+        style: ParticleStyle,
+        biasX: Double = 0.0,
+        biasZ: Double = 0.0,
+    ) {
         if (particles.size >= MAX_PARTICLES) return
+        // 出生瞬间“爆裂逸散”：随机水平方向 + 随机大小的横向初速，配合 tick 阻力先炸开再减速。
+        val angle = random.nextDouble() * Math.PI * 2.0
+        val horizontalSpeed = style.spread * (0.6 + random.nextDouble() * 0.4)
+        var vx = cos(angle) * horizontalSpeed
+        var vz = sin(angle) * horizontalSpeed
+        if (biasX != 0.0 || biasZ != 0.0) {
+            // 半心：主要朝被打掉那侧飞，仅叠加少量随机散开，方向感明确。
+            val dirSpeed = style.spread * (0.9 + random.nextDouble() * 0.5)
+            vx = biasX * dirSpeed + vx * 0.35
+            vz = biasZ * dirSpeed + vz * 0.35
+        }
         particles.add(
             Particle(
                 x,
                 y,
                 z,
-                (random.nextDouble() - 0.5) * 0.012,
-                (0.010 + random.nextDouble() * 0.008) * style.springScale,
-                (random.nextDouble() - 0.5) * 0.012,
+                vx,
+                (0.014 + random.nextDouble() * 0.012) * style.springScale, // 向上“蹦出”，随后慢慢落下
+                vz,
                 texture,
                 flipU,
                 style,
@@ -125,6 +153,9 @@ object HeartParticleManager {
             p.zo = p.z
             p.ageo = p.age
             p.vy -= GRAVITY
+            // 横向阻力：爆发逸散后迅速衰减，使粒子“炸开 → 减速 → 平稳竖直下落”。
+            p.vx *= HORIZONTAL_DRAG
+            p.vz *= HORIZONTAL_DRAG
             p.x += p.vx
             p.y += p.vy
             p.z += p.vz

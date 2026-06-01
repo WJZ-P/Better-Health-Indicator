@@ -22,6 +22,7 @@ import org.joml.Matrix4f
 import org.joml.Vector3f
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.sqrt
 
 /**
  * 生物头顶血量渲染。在 26.1 的 [LevelRenderEvents.COLLECT_SUBMITS] 阶段提交几何与文本：
@@ -52,9 +53,14 @@ object EntityHealthBarRenderer {
         val texture: Identifier,
         val flipU: Boolean,
         val style: HeartParticleManager.ParticleStyle,
+        // 被打掉半心的逸散方向：+1 屏幕右、-1 屏幕左、0 满心（无方向、四散）。
+        val horizontalDir: Int,
     )
 
     private val pendingSpawns = ArrayList<PendingSpawn>()
+
+    /** 爱心层中的一片待绘四边形：槽位中心 X + 是否水平翻转（决定半心填充侧）。 */
+    private class HeartQuad(val cx: Float, val flipU: Boolean)
 
     fun register() {
         LevelRenderEvents.COLLECT_SUBMITS.register(
@@ -163,8 +169,15 @@ object EntityHealthBarRenderer {
             // 掉落的是"被打掉的那半边"，与血条上保留的半心相反。
             // drainFromRight 下：满→半 掉右半(flipU=false)，半→空 掉左半(flipU=true)。
             val flipU = isHalf && (if (config.drainFromRight) afterHalves == 0 else afterHalves == 1)
+            // 被打掉的半边在屏幕的左/右：满→半(afterHalves==1)扣的是 drainFromRight 那侧，半→空(afterHalves==0)反之。
+            val horizontalDir = if (!isHalf) {
+                0
+            } else {
+                val rightSide = (afterHalves == 1) == config.drainFromRight
+                if (rightSide) 1 else -1
+            }
             // 仅登记“待生成”，世界坐标推迟到渲染帧按血条爱心的同一基准解析，确保像素级重合、无缝衔接。
-            pendingSpawns.add(PendingSpawn(entity, ref.cx, texture, flipU, style))
+            pendingSpawns.add(PendingSpawn(entity, ref.cx, texture, flipU, style, horizontalDir))
             spawned++
         }
     }
@@ -178,12 +191,25 @@ object EntityHealthBarRenderer {
     private fun flushPendingSpawns(minecraft: Minecraft, config: HealthIndicatorConfig, tickProgress: Float) {
         if (pendingSpawns.isEmpty()) return
         val rotation = minecraft.gameRenderer.mainCamera.rotation()
+        // 屏幕右方在世界中的水平单位向量（billboard 的 scale(-x) 下，局部 +X→屏幕左，故屏幕右= rotation·(+1,0,0)）。
+        val screenRight = Vector3f(1.0f, 0.0f, 0.0f)
+        rotation.transform(screenRight)
+        var srx = screenRight.x().toDouble()
+        var srz = screenRight.z().toDouble()
+        val srLen = sqrt(srx * srx + srz * srz)
+        if (srLen > 1.0e-6) {
+            srx /= srLen
+            srz /= srLen
+        }
         for (pending in pendingSpawns) {
             val entity = pending.entity
             val position = entity.getPosition(tickProgress)
             val height = entity.bbHeight + config.yOffset
             val offset = Vector3f(-config.scale * pending.cx, 0.0f, 0.0f)
             rotation.transform(offset)
+            // 半心：朝被打掉那侧（屏幕左/右）逸散；满心：无方向偏置、四散。
+            val biasX = srx * pending.horizontalDir
+            val biasZ = srz * pending.horizontalDir
             HeartParticleManager.spawn(
                 position.x + offset.x,
                 position.y + height + offset.y,
@@ -191,6 +217,8 @@ object EntityHealthBarRenderer {
                 pending.texture,
                 pending.flipU,
                 pending.style,
+                biasX,
+                biasZ,
             )
         }
         pendingSpawns.clear()
@@ -314,31 +342,30 @@ object EntityHealthBarRenderer {
         val view = HeartLayout.compute(health, maxHealth, config)
         val halfSize = HeartGraphics.SIZE / 2.0f
 
-        // 只有两层：container 背板 + 每槽位“自己算出的那一张爱心”，避免把所有层无脑叠上去（更省、且无多色重影）。
-        // 跨贴图是独立 submitCustomGeometry 调用、绘制顺序不保证，故仍给爱心层一个比 container 更靠近相机的深度，
-        // 由深度测试稳定压在 container 之上（仅 1 步，近距离视差≈黑色描边，不会再像三层那样糊成一片）。
-        val containerLayer = LinkedHashMap<Identifier, MutableList<Float>>()
-        val heartLayer = LinkedHashMap<Identifier, MutableList<Float>>()
-        // 边界半心若有下层颜色：需在半心下垫一张“下层满心”露出空缺侧颜色，单独再高一步避免与半心共面。
-        val halfRevealTop = LinkedHashMap<Identifier, MutableList<Float>>()
-        fun add(map: LinkedHashMap<Identifier, MutableList<Float>>, texture: Identifier, cx: Float) =
-            map.getOrPut(texture) { ArrayList() }.add(cx)
+        // 只有两层：container 背板 + 每槽位“自己算出的那一张/两张半心”。
+        // 多层血条出现半心时，不再用“下层满心 + 上层半心叠绘”（叠绘会与下层冲突），
+        // 而是把当前层半心（保留侧）与下层半心（空缺侧）作为左右互补的两片异色半心**并排不叠**绘制，从根本上规避共面冲突。
+        val containerLayer = LinkedHashMap<Identifier, MutableList<HeartQuad>>()
+        val heartLayer = LinkedHashMap<Identifier, MutableList<HeartQuad>>()
+        fun add(map: LinkedHashMap<Identifier, MutableList<HeartQuad>>, texture: Identifier, cx: Float, flipU: Boolean) =
+            map.getOrPut(texture) { ArrayList() }.add(HeartQuad(cx, flipU))
 
+        // 当前层半心的填充侧：drainFromRight 时填充屏幕左半（与血条扣血方向一致）。
+        val fillFlip = config.drainFromRight
         for (slot in view.slots) {
-            add(containerLayer, HeartGraphics.CONTAINER, slot.cx)
+            add(containerLayer, HeartGraphics.CONTAINER, slot.cx, false)
             when (slot.top) {
-                // 满心：直接画当前层满心（不再叠下层色，下层被完全遮挡、画了纯属浪费且会重影）。
-                HeartLayout.Top.FULL -> add(heartLayer, slot.topTier.full, slot.cx)
+                // 满心：直接画当前层满心（满心对称，flipU 无意义）。
+                HeartLayout.Top.FULL -> add(heartLayer, slot.topTier.full, slot.cx, false)
                 // 空缺：有下层则露出下层满心颜色；无下层就只剩 container（黑底）。
-                HeartLayout.Top.NONE -> slot.baseTier?.let { add(heartLayer, it.full, slot.cx) }
-                // 半心：有下层时先在 heartLayer 垫下层满心填充空缺侧，再把当前层半心叠到更靠前一步。
-                HeartLayout.Top.HALF -> {
-                    if (slot.baseTier != null) {
-                        add(heartLayer, slot.baseTier.full, slot.cx)
-                        add(halfRevealTop, slot.topTier.half, slot.cx)
-                    } else {
-                        add(heartLayer, slot.topTier.half, slot.cx)
-                    }
+                HeartLayout.Top.NONE -> slot.baseTier?.let { add(heartLayer, it.full, slot.cx, false) }
+                HeartLayout.Top.HALF -> if (slot.baseTier != null) {
+                    // 多层半心：左右两片互补异色半心并排（同层同深度、像素互不重叠），避免与下层冲突。
+                    add(heartLayer, slot.topTier.half, slot.cx, fillFlip) // 保留侧：当前层颜色
+                    add(heartLayer, slot.baseTier.half, slot.cx, !fillFlip) // 空缺侧：下层颜色
+                } else {
+                    // 单层半心：保留侧画当前层颜色，另一侧露出黑色 container。
+                    add(heartLayer, slot.topTier.half, slot.cx, fillFlip)
                 }
             }
         }
@@ -350,9 +377,8 @@ object EntityHealthBarRenderer {
         val zStep = (HEART_DEPTH_BIAS.toFloat() * distance) / scale
 
         billboard(poseStack, base, height, config.scale) {
-            drawHeartLayer(collector, poseStack, containerLayer, halfSize, config, 0.0f)
-            drawHeartLayer(collector, poseStack, heartLayer, halfSize, config, zStep)
-            drawHeartLayer(collector, poseStack, halfRevealTop, halfSize, config, zStep * 2.0f)
+            drawHeartLayer(collector, poseStack, containerLayer, halfSize, 0.0f)
+            drawHeartLayer(collector, poseStack, heartLayer, halfSize, zStep)
         }
         return view.multiplier
     }
@@ -360,32 +386,17 @@ object EntityHealthBarRenderer {
     private fun drawHeartLayer(
         collector: SubmitNodeCollector,
         poseStack: PoseStack,
-        groups: Map<Identifier, MutableList<Float>>,
+        groups: Map<Identifier, MutableList<HeartQuad>>,
         halfSize: Float,
-        config: HealthIndicatorConfig,
         z: Float,
     ) {
-        for ((texture, centers) in groups) {
-            // 半心按掉血方向翻转填充侧：从右往左扣时填充左半边。
-            val flipU = config.drainFromRight && HeartGraphics.isHalfTexture(texture)
-            drawHeartGroup(collector, poseStack, texture, centers, halfSize, flipU, z)
-        }
-    }
-
-    private fun drawHeartGroup(
-        collector: SubmitNodeCollector,
-        poseStack: PoseStack,
-        texture: Identifier,
-        centers: List<Float>,
-        halfSize: Float,
-        flipU: Boolean,
-        z: Float,
-    ) {
-        if (centers.isEmpty()) return
-        collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture)) { pose, consumer ->
-            val m = pose.pose()
-            for (cx in centers) {
-                HeartGraphics.quad(consumer, m, cx - halfSize, -halfSize, cx + halfSize, halfSize, WHITE, flipU, z)
+        for ((texture, quads) in groups) {
+            if (quads.isEmpty()) continue
+            collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture)) { pose, consumer ->
+                val m = pose.pose()
+                for (q in quads) {
+                    HeartGraphics.quad(consumer, m, q.cx - halfSize, -halfSize, q.cx + halfSize, halfSize, WHITE, q.flipU, z)
+                }
             }
         }
     }
