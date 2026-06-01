@@ -105,6 +105,20 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.panelShowModel = it }
                 .build(),
         )
+        panel.addEntry(
+            entry.startBooleanToggle(Component.literal("追踪最近受击目标（兜底）"), config.panelTrackAttacked)
+                .setDefaultValue(true)
+                .setSaveConsumer { config.panelTrackAttacked = it }
+                .build(),
+        )
+        panel.addEntry(
+            entry.startDoubleField(Component.literal("受击追踪有效期（秒）"), config.panelAttackTrackingSeconds)
+                .setMin(1.0)
+                .setMax(60.0)
+                .setDefaultValue(5.0)
+                .setSaveConsumer { config.panelAttackTrackingSeconds = it }
+                .build(),
+        )
 
         return builder.build()
     }

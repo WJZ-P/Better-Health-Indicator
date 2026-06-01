@@ -6,11 +6,14 @@ import com.wjz.betterhealthindicator.config.PanelCorner
 import com.wjz.betterhealthindicator.client.render.EntitySelector
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.minecraft.client.Minecraft
+import net.minecraft.world.InteractionResult
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
+import net.minecraft.util.Mth
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
 import org.joml.Quaternionf
@@ -27,14 +30,26 @@ import kotlin.math.ceil
 object HealthPanelHud {
     private const val PANEL_WIDTH = 120
     private const val PANEL_HEIGHT = 46
-    private const val MARGIN = 6
-    private const val PADDING = 3
+    private const val MARGIN = 2
+    private const val PADDING = 2
 
     private const val PANEL_BACKGROUND = 0x90101018.toInt()
     private const val BAR_BACKGROUND = 0xC0202020.toInt()
     private const val TEXT_COLOR = 0xFFFFFFFF.toInt()
+    private const val MODEL_PITCH = -15.0f
+
+    // 最近被本地玩家攻击的生物与攻击时刻（毫秒墙钟）；用于准星无目标时的兜底显示。
+    private var lastAttacked: LivingEntity? = null
+    private var lastAttackAtMs: Long = 0L
 
     fun register() {
+        AttackEntityCallback.EVENT.register { player, _, _, entity, _ ->
+            if (player === Minecraft.getInstance().player && entity is LivingEntity) {
+                lastAttacked = entity
+                lastAttackAtMs = System.currentTimeMillis()
+            }
+            InteractionResult.PASS
+        }
         HudElementRegistry.addLast(
             Identifier.fromNamespaceAndPath("better_health_indicator", "health_panel"),
             HudElement { graphics, delta ->
@@ -46,7 +61,8 @@ object HealthPanelHud {
 
                 val tickProgress = delta.getGameTimeDeltaPartialTick(false)
                 val frame = EntitySelector.buildFrame(minecraft, config, tickProgress) ?: return@HudElement
-                val target = EntitySelector.pickPanelTarget(frame) ?: return@HudElement
+                // 优先准星目标；都没有时，最低优先级兜底显示有效期内的“最近受击生物”。
+                val target = EntitySelector.pickPanelTarget(frame) ?: pickAttackedFallback(frame) ?: return@HudElement
 
                 val panelX = when (config.panelCorner) {
                     PanelCorner.TOP_LEFT -> MARGIN
@@ -86,8 +102,23 @@ object HealthPanelHud {
         BetterHealthIndicatorLogger.info("Health panel HUD registered.")
     }
 
-    private const val PANEL_TILT = 35.0f
-    private const val MODEL_PITCH = -8.0f
+    /**
+     * 兜底目标：在有效期内且仍满足通用渲染条件的“最近受击生物”，否则清空并返回 null。
+     * 作为最低优先级，仅当准星没有命中可显示目标时使用。
+     */
+    private fun pickAttackedFallback(frame: EntitySelector.Frame): LivingEntity? {
+        val config = frame.config
+        if (!config.panelTrackAttacked) return null
+        val attacked = lastAttacked ?: return null
+
+        val elapsed = System.currentTimeMillis() - lastAttackAtMs
+        if (elapsed > (config.panelAttackTrackingSeconds * 1000.0).toLong()) {
+            lastAttacked = null
+            return null
+        }
+        if (!EntitySelector.isPanelFallbackEligible(attacked, frame)) return null
+        return attacked
+    }
 
     private fun renderEntityModel(
         graphics: GuiGraphicsExtractor,
@@ -102,10 +133,15 @@ object HealthPanelHud {
         renderState.shadowPieces.clear()
         renderState.outlineColor = 0
         if (renderState is LivingEntityRenderState) {
-            // 在固定斜角基础上叠加“玩家相对生物的水平视角”：生物转身/逃跑时，面板会同步显示侧面或背面。
-            val modelYaw = PANEL_TILT - relativeViewYaw(entity)
-            renderState.bodyRot = 180.0f + modelYaw
-            renderState.yRot = modelYaw
+            // bodyRot：身体绝对朝向，跟随“玩家相对生物的水平视角”，使绕行时面板显示对应侧面/背面。
+            // yRot：原版语义为“头相对身体的扭转量并取负”（0 即对齐），故只放头自身扭转，绝不能混入身体朝向。
+            val partialTick = Minecraft.getInstance().deltaTracker.getGameTimeDeltaPartialTick(false)
+            val headDelta = Mth.degreesDifference(
+                Mth.rotLerp(partialTick, entity.yBodyRotO, entity.yBodyRot),
+                Mth.rotLerp(partialTick, entity.yHeadRotO, entity.yHeadRot),
+            )
+            renderState.bodyRot = 180.0f + relativeViewYaw(entity)
+            renderState.yRot = -headDelta
             renderState.xRot = if (renderState.pose != Pose.FALL_FLYING) MODEL_PITCH else 0.0f
             renderState.boundingBoxWidth /= renderState.scale
             renderState.boundingBoxHeight /= renderState.scale
@@ -113,10 +149,10 @@ object HealthPanelHud {
         }
 
         val boxHeight = (y1 - y0).toFloat()
-        val size = (boxHeight * 0.8f / entity.bbHeight.coerceAtLeast(0.6f)).coerceIn(5.0f, 45.0f)
+        val size = (boxHeight * 0.7f / entity.bbHeight.coerceAtLeast(0.6f)).coerceIn(5.0f, 45.0f)
         val translation = Vector3f(0.0f, renderState.boundingBoxHeight / 2.0f + 0.0625f, 0.0f)
-        val rotation = Quaternionf().rotateZ(Math.PI.toFloat())
-        val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Math.PI.toFloat() / 180.0f))
+        val rotation = Quaternionf().rotateZ(Mth.PI) //  这里Z轴转一百八，不然渲染出来是倒立的
+        val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Mth.PI / 180.0f))
         rotation.mul(cameraTilt)
         graphics.entity(renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
     }

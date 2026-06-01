@@ -77,6 +77,10 @@ class HealthIndicatorConfig {
     var panelCorner: PanelCorner = PanelCorner.TOP_LEFT
     var panelShowModel: Boolean = true
     var panelScale: Float = 1.0f
+    // 受击兜底追踪：攻击某生物后，在有效期内即使没有其他可渲染目标，也以最低优先级兜底显示它。
+    var panelTrackAttacked: Boolean = true
+    // 受击目标的兜底有效期（秒）；攻击瞬间刷新计时，超时后不再兜底。
+    var panelAttackTrackingSeconds: Double = 5.0
 
     val maxDistanceSquared: Double get() = maxDistance * maxDistance
 }

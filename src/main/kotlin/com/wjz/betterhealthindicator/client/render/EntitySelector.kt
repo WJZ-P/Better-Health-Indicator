@@ -94,6 +94,12 @@ object EntitySelector {
         return if (passesCommonFilters(target, frame)) target else null
     }
 
+    /**
+     * 受击兜底候选是否仍可渲染：复用与显示策略无关的通用过滤（存活/可见/血量/距离/墙体遮挡）。
+     * 供面板在没有其他目标时，对“最近受击实体”做最低优先级兜底显示。
+     */
+    fun isPanelFallbackEligible(entity: LivingEntity, frame: Frame): Boolean = passesCommonFilters(entity, frame)
+
     private fun getLookedAtEntity(minecraft: Minecraft, camera: Camera, maxDistance: Double): LivingEntity? {
         val viewer = minecraft.cameraEntity ?: return null
         val eye = camera.position()
