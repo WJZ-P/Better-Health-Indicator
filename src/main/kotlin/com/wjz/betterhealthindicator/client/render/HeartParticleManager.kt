@@ -48,6 +48,8 @@ object HeartParticleManager {
      * @param swayAmp 横向摆动幅度（占爱心宽度比例）。
      * @param tiltDeg 倾斜摆动幅度（度）。
      * @param jitterAmp 高频抖动幅度（占爱心宽度比例，仅重档 > 0）。
+     * @param riseGravityScale 上升段重力倍率（越大越快冲到顶点；高档调大让弹起更迅猛）。
+     * @param fallGravityScale 下落段重力倍率（越小落得越慢；高档调小让爱心在顶点附近“悬停”缓降，更壮观）。
      */
     class ParticleStyle(
         val springScale: Float,
@@ -55,21 +57,23 @@ object HeartParticleManager {
         val swayAmp: Float,
         val tiltDeg: Float,
         val jitterAmp: Float,
+        val riseGravityScale: Double,
+        val fallGravityScale: Double,
     )
 
     /**
      * 按本次总伤害选择掉落风格：
-     * - 轻档（< medium）：轻微逸散、轻微晃动；
-     * - 中档（[medium, heavy]）：中等逸散、中等晃动；
-     * - 重档（> heavy）：大幅爆裂逸散 + 加大弹簧 + 叠加高频抖动，体感震撼。
-     * @param shakeScale 全局抖动幅度倍率（缩放 spread/sway/tilt/jitter，不改变弹起高度）。
+     * - 轻档（< medium）：小幅逸散、轻微晃动，弹簧“快速蹦一下”就落回（表示造成一点点伤害）；
+     * - 中档（[medium, heavy]）：中等逸散与晃动，上升略快、下落略缓；
+     * - 重档（> heavy）：大幅爆裂逸散 + 加大弹簧 + 高频抖动；上升迅猛冲顶、下落明显放缓“悬停”缓降，体感壮观。
+     * @param shakeScale 全局抖动幅度倍率（缩放 spread/sway/tilt/jitter，不改变弹起高度与升降节奏）。
      */
     fun styleFor(damage: Float, medium: Float, heavy: Float, shakeScale: Float): ParticleStyle {
         val s = shakeScale.coerceAtLeast(0.0f)
         return when {
-            damage > heavy -> ParticleStyle(1.7f, 0.20f * s, 0.46f * s, 28.0f * s, 0.14f * s)
-            damage >= medium -> ParticleStyle(1.3f, 0.12f * s, 0.14f * s, 9.0f * s, 0.0f)
-            else -> ParticleStyle(1.0f, 0.08f * s, 0.07f * s, 5.0f * s, 0.0f)
+            damage > heavy -> ParticleStyle(3.0f, 0.20f * s, 0.46f * s, 28.0f * s, 0.14f * s, 2.5, 0.45)
+            damage >= medium -> ParticleStyle(2.0f, 0.12f * s, 0.14f * s, 9.0f * s, 0.0f, 2.0, 0.7)
+            else -> ParticleStyle(1.5f, 0.08f * s, 0.07f * s, 5.0f * s, 0.0f, 1.5, 1.0)
         }
     }
 
@@ -152,7 +156,10 @@ object HeartParticleManager {
             p.yo = p.y
             p.zo = p.z
             p.ageo = p.age
-            p.vy -= GRAVITY
+            // 非对称重力：上升段（vy>0）用更大重力快速冲顶，下落段（vy≤0）用更小重力放缓下落。
+            // 伤害越高，上升越迅猛、下落越“悬停”缓降，攻击表现越壮观。
+            val gravity = GRAVITY * if (p.vy > 0.0) p.style.riseGravityScale else p.style.fallGravityScale
+            p.vy -= gravity
             // 横向阻力：爆发逸散后迅速衰减，使粒子“炸开 → 减速 → 平稳竖直下落”。
             p.vx *= HORIZONTAL_DRAG
             p.vz *= HORIZONTAL_DRAG
