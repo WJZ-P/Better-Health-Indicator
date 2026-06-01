@@ -21,6 +21,11 @@ object HeartParticleManager {
     private const val MAX_PARTICLES = 1024
     private const val MAX_FRAME_DELTA = 0.1f
 
+    // 渲染时沿“相机→粒子”视线把粒子朝相机方向挪动的距离比例：
+    // billboard 沿视线平移不改变屏幕位置，仅令其深度严格更靠前，从而覆盖（写深度的）血条爱心，避免共面被遮挡。
+    // 按距离取比例，远近都能稳定盖住、不发生深度打架。
+    private const val FRONT_FRACTION = 0.02
+
     private class Particle(
         var x: Double,
         var y: Double,
@@ -97,7 +102,11 @@ object HeartParticleManager {
             val texture = p.texture
             poseStack.pushPose()
             try {
-                poseStack.translate(p.x - cameraPosition.x, p.y - cameraPosition.y, p.z - cameraPosition.z)
+                // 朝相机方向沿视线挪动 FRONT_FRACTION：缩放“相机→粒子”偏移向量即可（屏幕位置不变，仅深度更靠前）。
+                val dx = p.x - cameraPosition.x
+                val dy = p.y - cameraPosition.y
+                val dz = p.z - cameraPosition.z
+                poseStack.translate(dx * (1.0 - FRONT_FRACTION), dy * (1.0 - FRONT_FRACTION), dz * (1.0 - FRONT_FRACTION))
                 poseStack.mulPose(cameraOrientation)
                 poseStack.scale(-SCALE, -SCALE, SCALE)
                 collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(texture)) { pose, consumer ->

@@ -269,14 +269,20 @@ object EntityHealthBarRenderer {
         val view = HeartLayout.compute(health, maxHealth, config)
         val halfSize = HeartGraphics.SIZE / 2.0f
 
-        // 同贴图合并为一次几何提交；先底层后顶层，保证半心背后正确露出 container 或下层颜色。
+        // 同贴图合并为一次几何提交；按 容器→下层色→顶层 顺序入组（先入先画=在下层），保证描边与分层正确叠放。
         val groups = LinkedHashMap<Identifier, MutableList<Float>>()
         fun add(texture: Identifier, cx: Float) = groups.getOrPut(texture) { ArrayList() }.add(cx)
 
+        // 最底层：所有槽位都垫一张 container（比爱心大一圈），统一作为黑色描边背板——满心也需要，否则丢描边。
         for (slot in view.slots) {
-            if (slot.top == HeartLayout.Top.FULL) continue // 满心完全遮住底层，省略
-            add(slot.baseTier?.full ?: HeartGraphics.CONTAINER, slot.cx)
+            add(HeartGraphics.CONTAINER, slot.cx)
         }
+        // 中间层：分层异色时被揭示的下层满心颜色，盖住 container 中心、四周留出描边。
+        for (slot in view.slots) {
+            val baseTier = slot.baseTier ?: continue
+            add(baseTier.full, slot.cx)
+        }
+        // 顶层：本槽位当前层爱心（满/半）；半心或空心处自然露出其下的下层色或 container。
         for (slot in view.slots) {
             when (slot.top) {
                 HeartLayout.Top.FULL -> add(slot.topTier.full, slot.cx)
