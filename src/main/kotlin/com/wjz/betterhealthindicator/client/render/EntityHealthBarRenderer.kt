@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
 import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.Font
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.client.renderer.state.level.CameraRenderState
@@ -30,15 +31,19 @@ import kotlin.math.sqrt
 /**
  * 生物头顶血量渲染。在 26.1 的 [LevelRenderEvents.COLLECT_SUBMITS] 阶段提交几何与文本：
  * - 图形（条 / 爱心）通过 [SubmitNodeCollector.submitCustomGeometry] 提交；
- * - 文本（名字 / 数值）通过 [SubmitNodeCollector.submitNameTag] 提交（原版浮空标签，自动朝向摄像机）。
+ * - 文本（名字 / 数值）通过 [SubmitNodeCollector.submitText] 自绘提交（自行 billboard 并按字号倍率缩放）。
  *
  * 同时检测生物掉血并交由 [HeartParticleManager] 生成掉落爱心粒子。
  */
 object EntityHealthBarRenderer {
     private const val WHITE = -1
-    private const val LINE_GAP = 0.30
-    private const val NAME_TAG_BACKGROUND = true
+    private const val LINE_GAP = +0.2f
     private const val MAX_PARTICLE_BURST = 20
+
+    // 原版浮空名牌的基准字号（局部缩放）；自绘文本以此为基准再乘以 config.textScale。
+    private const val NAME_TAG_SCALE = 0.025f
+    // 文本背景板颜色（半透明黑，alpha 64），与原版名牌默认观感一致。
+    private const val TEXT_BACKGROUND = 0x40000000
 
     // 爱心相对 container 朝相机方向的“深度偏移量”，按世界单位/每格距离取值（模拟 polygon offset）。
     // 固定的局部 z 偏移会让偏离屏幕中心的心产生横向投影位移（越靠边越大 → 整排被剪切成斜的，即“歪”）；
@@ -370,41 +375,63 @@ object EntityHealthBarRenderer {
         if (heartMultiplier > 0) {
             // 超出调色板层数的高血量生物，在血条上方标注「共多少管血」。
             val text = Component.literal("x$heartMultiplier")
-            submitLabel(collector, poseStack, base, barHeight + LINE_GAP * 2, text, distanceSq, cameraState)
+            submitText3d(collector, poseStack, base, barHeight + LINE_GAP * 3, text, config, cameraState)
         }
 
-        if (config.showName) {
-            submitLabel(collector, poseStack, base, barHeight + LINE_GAP, entity.displayName, distanceSq, cameraState)
+        // 名字与血量数值合并为同一行：名字在前、血量数值在后（血量默认关闭）。
+        val showHp = config.showHealthText || config.barStyle == BarStyle.NUMERIC
+        val label: Component? = when {
+            config.showName && showHp ->
+                entity.displayName.copy().append(Component.literal("  ${healthText(entity)}"))
+            config.showName -> entity.displayName
+            showHp -> Component.literal(healthText(entity))
+            else -> null
         }
-
-        if (config.showHealthText || config.barStyle == BarStyle.NUMERIC) {
-            val healthY = if (config.barStyle == BarStyle.NUMERIC) barHeight else barHeight - LINE_GAP
-            val text = Component.literal("${ceil(entity.health).toInt()} / ${ceil(entity.maxHealth).toInt()}")
-            submitLabel(collector, poseStack, base, healthY, text, distanceSq, cameraState)
+        if (label != null) {
+            // 数值样式无血条几何，文本落在血条基准高度；其余样式落在血条上方。
+            val labelY = if (config.barStyle == BarStyle.NUMERIC) barHeight else barHeight + LINE_GAP * 2
+            submitText3d(collector, poseStack, base, labelY, label, config, cameraState)
         }
     }
 
-    private fun submitLabel(
+    private fun healthText(entity: LivingEntity): String =
+        "${ceil(entity.health).toInt()} / ${ceil(entity.maxHealth).toInt()}"
+
+    /**
+     * 自绘浮空文本（替代原版 submitNameTag），支持通过 [HealthIndicatorConfig.textScale] 调节字号。
+     * billboard：平移到目标点 → 朝向相机 → 翻转并按 [NAME_TAG_SCALE]×textScale 缩放，再水平居中提交。
+     */
+    private fun submitText3d(
         collector: SubmitNodeCollector,
         poseStack: PoseStack,
         base: Vec3,
         localY: Double,
         text: Component,
-        distanceSq: Double,
+        config: HealthIndicatorConfig,
         cameraState: CameraRenderState,
     ) {
+        val font = Minecraft.getInstance().font
+        val width = font.width(text)
+        // occludeBehindWalls：true 走 NORMAL（被墙体遮挡），false 走 SEE_THROUGH（始终可见）。
+        val displayMode = if (config.occludeBehindWalls) Font.DisplayMode.NORMAL else Font.DisplayMode.SEE_THROUGH
+        val scale = NAME_TAG_SCALE * config.textScale.toFloat()
         poseStack.pushPose()
         try {
-            poseStack.translate(base.x, base.y, base.z)
-            collector.submitNameTag(
+            poseStack.translate(base.x, base.y + localY, base.z)
+            poseStack.mulPose(cameraState.orientation)
+            // 仅翻转 Y（文本 Y 向下、世界 Y 向上）；X 必须保持正，否则四边形绕序反转被字体渲染剔除。
+            poseStack.scale(scale, -scale, scale)
+            collector.submitText(
                 poseStack,
-                Vec3(0.0, localY, 0.0),
-                0,
-                text,
-                NAME_TAG_BACKGROUND,
+                -width / 2.0f,
+                0.0f,
+                text.visualOrderText,
+                false,
+                displayMode,
                 LightCoordsUtil.FULL_BRIGHT,
-                distanceSq,
-                cameraState,
+                WHITE,
+                TEXT_BACKGROUND,
+                0,
             )
         } finally {
             poseStack.popPose()

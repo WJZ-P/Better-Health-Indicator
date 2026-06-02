@@ -65,7 +65,17 @@ object ClothConfigScreenFactory {
         head.addEntry(
             entry.startBooleanToggle(Component.literal("显示血量数值"), config.showHealthText)
                 .setDefaultValue(Defaults.SHOW_HEALTH_TEXT)
+                .setTooltip(Component.literal("开启后在名字同一行追加「当前/上限」血量数值"))
                 .setSaveConsumer { config.showHealthText = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startDoubleField(Component.literal("文本字号倍率"), config.textScale)
+                .setMin(0.3)
+                .setMax(3.0)
+                .setDefaultValue(Defaults.TEXT_SCALE)
+                .setTooltip(Component.literal("名字/血量文本相对原版名牌字号的倍率，1.0 即原版大小"))
+                .setSaveConsumer { config.textScale = it }
                 .build(),
         )
         head.addEntry(
@@ -84,6 +94,15 @@ object ClothConfigScreenFactory {
             entry.startBooleanToggle(Component.literal("显示玩家自己"), config.showSelf)
                 .setDefaultValue(Defaults.SHOW_SELF)
                 .setSaveConsumer { config.showSelf = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startDoubleField(Component.literal("血条高度偏移（格）"), config.yOffset)
+                .setMin(-2.0)
+                .setMax(3.0)
+                .setDefaultValue(Defaults.Y_OFFSET)
+                .setTooltip(Component.literal("血条在生物模型顶部之上的额外高度；0 即贴着模型最高点，正值上移、负值下移"))
+                .setSaveConsumer { config.yOffset = it }
                 .build(),
         )
         head.addEntry(

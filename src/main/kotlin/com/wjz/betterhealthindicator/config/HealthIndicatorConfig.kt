@@ -61,6 +61,8 @@ class HealthIndicatorConfig {
     var relativeHeartCount: Int = Defaults.RELATIVE_HEART_COUNT
     var showName: Boolean = Defaults.SHOW_NAME
     var showHealthText: Boolean = Defaults.SHOW_HEALTH_TEXT
+    // 名字/血量文本相对原版名牌字号的倍率（自绘文本，1.0 = 原版大小）。
+    var textScale: Double = Defaults.TEXT_SCALE
     var occludeBehindWalls: Boolean = Defaults.OCCLUDE_BEHIND_WALLS
     var showFullHealthEntities: Boolean = Defaults.SHOW_FULL_HEALTH_ENTITIES
     var showSelf: Boolean = Defaults.SHOW_SELF
@@ -110,13 +112,14 @@ class HealthIndicatorConfig {
         const val TIERED_HEARTS: Boolean = true
         const val RELATIVE_HEART_COUNT: Int = 10
         const val SHOW_NAME: Boolean = true
-        const val SHOW_HEALTH_TEXT: Boolean = true
+        const val SHOW_HEALTH_TEXT: Boolean = false
+        const val TEXT_SCALE: Double = 1.0
         const val OCCLUDE_BEHIND_WALLS: Boolean = true
         const val SHOW_FULL_HEALTH_ENTITIES: Boolean = true
         const val SHOW_SELF: Boolean = false
         const val BAR_WIDTH: Float = 26.0f
         const val BAR_HEIGHT: Float = 4.0f
-        const val Y_OFFSET: Double = 0.5
+        const val Y_OFFSET: Double = 0.2
         const val SCALE: Float = 0.025f
         const val FOREGROUND_ALPHA: Int = 235
         val BACKGROUND_COLOR: Int = 0xB0202020.toInt()
