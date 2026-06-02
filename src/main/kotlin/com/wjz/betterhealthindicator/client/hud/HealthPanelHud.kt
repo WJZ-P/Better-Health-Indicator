@@ -3,29 +3,25 @@ package com.wjz.betterhealthindicator.client.hud
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.PanelCorner
+import com.wjz.betterhealthindicator.client.render.EntityModelExtents
 import com.wjz.betterhealthindicator.client.render.EntitySelector
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.minecraft.client.Minecraft
 import net.minecraft.world.InteractionResult
-import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.gui.GuiGraphicsExtractor
-import net.minecraft.client.renderer.entity.LivingEntityRenderer
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.util.Mth
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.ceil
-import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * 屏幕角落血量面板：框 + 关注生物的实时 3D 模型 + 名字与血量信息。
@@ -164,7 +160,7 @@ object HealthPanelHud {
         // 同时按高度与（最坏角度的）宽度求可放入渲染框的最大缩放，取较小者，确保横宽生物也能完整展示不被裁切。
         val boxWidth = (x1 - x0).toFloat()
         val boxHeight = (y1 - y0).toFloat()
-        val extents = modelExtents(entity)
+        val extents = EntityModelExtents.get(entity)
         // 优先用模型真实网格范围（含头/嘴等凸出网格）；取不到时退化为碰撞箱估算。
         val verticalExtent = (extents?.height ?: entity.bbHeight).coerceAtLeast(0.6f)
         val horizontalExtent =
@@ -177,51 +173,6 @@ object HealthPanelHud {
         val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Mth.PI / 180.0f))
         rotation.mul(cameraTilt)
         graphics.entity(renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
-    }
-
-    /** 模型真实网格范围（方块）：height 为竖直高度，horizontalDiagonal 为水平足迹(X×Z)对角线（绕行最坏投影）。 */
-    private class ModelExtents(val height: Float, val horizontalDiagonal: Float)
-
-    // 模型范围按实体类型缓存：同种实体的默认姿态尺寸固定，只需计算一次，避免每帧遍历所有 cube 顶点。
-    // 值可为 null（非生物渲染器/空模型），用 containsKey 区分“已算过的 null”与“未算过”，防止反复重算。
-    private val modelExtentsCache = HashMap<EntityType<*>, ModelExtents?>()
-
-    private fun modelExtents(entity: LivingEntity): ModelExtents? {
-        val type = entity.type
-        if (modelExtentsCache.containsKey(type)) return modelExtentsCache[type]
-        val computed = computeModelExtents(entity)
-        modelExtentsCache[type] = computed
-        return computed
-    }
-
-    /**
-     * 通过 [ModelPart.getExtentsForGui] 累计模型所有 cube 顶点的 AABB，得到“含头/嘴等凸出网格”的真实尺寸。
-     * 比碰撞箱（仅物理体积）精确：牛头沿 Z 轴凸出的部分会被计入。非生物渲染器或异常时返回 null 以走碰撞箱兜底。
-     *
-     * 测量前先把所有部件重置到初始姿态：模型对象为全局共享、每帧被 setupAnim 改写，否则会量到动画中途的姿势
-     * （走路时腿张开等），导致尺寸忽大忽小。
-     */
-    private fun computeModelExtents(entity: LivingEntity): ModelExtents? {
-        val renderer = Minecraft.getInstance().entityRenderDispatcher.getRenderer(entity)
-        val model = (renderer as? LivingEntityRenderer<*, *, *>)?.model ?: return null
-        val root = model.root()
-        root.getAllParts().forEach { it.resetPose() }
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var minZ = Float.MAX_VALUE
-        var maxX = -Float.MAX_VALUE
-        var maxY = -Float.MAX_VALUE
-        var maxZ = -Float.MAX_VALUE
-        root.getExtentsForGui(PoseStack()) { v ->
-            minX = min(minX, v.x()); maxX = max(maxX, v.x())
-            minY = min(minY, v.y()); maxY = max(maxY, v.y())
-            minZ = min(minZ, v.z()); maxZ = max(maxZ, v.z())
-        }
-        if (minX > maxX) return null // 模型无任何 cube 时跳过
-        val xExtent = maxX - minX
-        val yExtent = maxY - minY
-        val zExtent = maxZ - minZ
-        return ModelExtents(height = yExtent, horizontalDiagonal = sqrt(xExtent * xExtent + zExtent * zExtent))
     }
 
     /**

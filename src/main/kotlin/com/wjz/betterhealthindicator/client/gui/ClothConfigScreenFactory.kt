@@ -87,6 +87,13 @@ object ClothConfigScreenFactory {
                 .build(),
         )
         head.addEntry(
+            entry.startBooleanToggle(Component.literal("受击掉血粒子"), config.damageParticlesEnabled)
+                .setDefaultValue(Defaults.DAMAGE_PARTICLES_ENABLED)
+                .setTooltip(Component.literal("生物受击掉血时，从对应爱心位置迸出掉落爱心粒子"))
+                .setSaveConsumer { config.damageParticlesEnabled = it }
+                .build(),
+        )
+        head.addEntry(
             entry.startDoubleField(Component.literal("掉血粒子抖动幅度倍率"), config.particleShakeScale)
                 .setMin(0.0)
                 .setMax(3.0)
@@ -111,6 +118,13 @@ object ClothConfigScreenFactory {
                 .setDefaultValue(Defaults.PARTICLE_HEAVY_DAMAGE)
                 .setTooltip(Component.literal("单次伤害 > 此值进入重档：加大弹簧并叠加抖动"))
                 .setSaveConsumer { config.particleHeavyDamage = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startBooleanToggle(Component.literal("容器碎裂特效"), config.containerShatterEnabled)
+                .setDefaultValue(Defaults.CONTAINER_SHATTER_ENABLED)
+                .setTooltip(Component.literal("生物死亡时心形容器（背板）抖动并逐颗连锁碎裂；较酷炫，可关闭以免喧宾夺主"))
+                .setSaveConsumer { config.containerShatterEnabled = it }
                 .build(),
         )
 

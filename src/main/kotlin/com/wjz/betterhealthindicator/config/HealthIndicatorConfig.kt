@@ -72,11 +72,15 @@ class HealthIndicatorConfig {
     var backgroundColor: Int = Defaults.BACKGROUND_COLOR
     var borderColor: Int = Defaults.BORDER_COLOR
 
+    // 生物受击掉血时，从对应爱心位置迸出的掉落爱心粒子总开关。
+    var damageParticlesEnabled: Boolean = Defaults.DAMAGE_PARTICLES_ENABLED
     // 掉血爱心粒子：晃动/抖动幅度的全局倍率，以及伤害分档阈值（轻/中/重，越重越震撼）。
     var particleShakeScale: Double = Defaults.PARTICLE_SHAKE_SCALE
     // 伤害 ≥ 此值进入「中档」晃动；伤害 > particleHeavyDamage 进入「重档」（加大弹簧 + 抖动）。
     var particleMediumDamage: Double = Defaults.PARTICLE_MEDIUM_DAMAGE
     var particleHeavyDamage: Double = Defaults.PARTICLE_HEAVY_DAMAGE
+    // 生物死亡时心形容器（背板）的抖动+逐颗连锁碎裂特效；较酷炫，可关闭以免喧宾夺主。
+    var containerShatterEnabled: Boolean = Defaults.CONTAINER_SHATTER_ENABLED
 
     // 屏幕面板
     var panelEnabled: Boolean = Defaults.PANEL_ENABLED
@@ -118,9 +122,11 @@ class HealthIndicatorConfig {
         val BACKGROUND_COLOR: Int = 0xB0202020.toInt()
         val BORDER_COLOR: Int = 0xC0000000.toInt()
 
+        const val DAMAGE_PARTICLES_ENABLED: Boolean = true
         const val PARTICLE_SHAKE_SCALE: Double = 1.0
         const val PARTICLE_MEDIUM_DAMAGE: Double = 7.0
         const val PARTICLE_HEAVY_DAMAGE: Double = 10.0
+        const val CONTAINER_SHATTER_ENABLED: Boolean = true
 
         const val PANEL_ENABLED: Boolean = true
         val PANEL_CORNER: PanelCorner = PanelCorner.TOP_LEFT

@@ -22,6 +22,9 @@ import org.joml.Matrix4f
 import org.joml.Vector3f
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -43,6 +46,14 @@ object EntityHealthBarRenderer {
     // 仅用于打破与 container 的共面平局，故取很小的值即可。
     private const val HEART_DEPTH_BIAS = 0.0015
 
+    // —— 死亡破碎序列 ——
+    // 生物死亡后不立刻炸开，而是先「高频抖动」预警，再沿扣血方向逐颗炸裂，更具仪式感。
+    private const val DEATH_SHAKE_TICKS = 4 // 预警抖动时长（约 0.2s）
+    private const val DEATH_EXPLODE_TICKS = 8 // 逐颗炸开铺开的tick 时常
+    private const val DEATH_SHAKE_FREQ = 3.0f // 抖动角频率（弧度/tick），越大越“高频”
+    private const val DEATH_SHAKE_AMP = 0.16f // 抖动幅度（占爱心贴图尺寸比例）
+    private const val DEATH_MAX = 16 // 同时存在的死亡序列上限
+
     private val lastHealth = HashMap<Int, Float>()
     private val seenEntities = HashSet<Int>()
 
@@ -59,8 +70,39 @@ object EntityHealthBarRenderer {
 
     private val pendingSpawns = ArrayList<PendingSpawn>()
 
-    /** 爱心层中的一片待绘四边形：槽位中心 X + 是否水平翻转（决定半心填充侧）。 */
-    private class HeartQuad(val cx: Float, val flipU: Boolean)
+    /** 爱心层贴图片：贴图 + 是否水平翻转（半心填充侧）。 */
+    private class TexQuad(val texture: Identifier, val flipU: Boolean)
+
+    /** 死亡序列中的单个 container 槽位：先抖动预警，到点炸裂成碎片（彩色心走原有掉落粒子，不在此处）。 */
+    private class DeathHeart(
+        val cx: Float,
+        val containerTexture: Identifier,
+        val explodeTick: Int, // 序列内第几 tick 炸裂（含抖动预警偏移）
+        val phase: Float, // 抖动相位，逐心错开更有“颤抖”感
+        var exploded: Boolean = false,
+    )
+
+    /** 一次 container 破碎的完整序列：固定在死亡处的世界中心，逐 tick 推进抖动与逐颗炸裂。 */
+    private class DeathSequence(
+        val entityId: Int, // 用于在序列存活期间抑制该实体的活体血条，避免静止 container 叠在抖动上
+        val worldX: Double,
+        val worldY: Double, // 已含血条高度偏移
+        val worldZ: Double,
+        val scale: Float,
+        val hearts: List<DeathHeart>,
+    ) {
+        var age = 0
+        fun done(): Boolean = hearts.all { it.exploded }
+    }
+
+    /** 死亡时待起爆的序列：container 槽位在检测帧即构建，世界坐标延迟到渲染帧按血条同基准解析。 */
+    private class PendingDeath(val entity: LivingEntity, val hearts: List<DeathHeart>)
+
+    private val pendingDeaths = ArrayList<PendingDeath>()
+    private val deathSequences = ArrayList<DeathSequence>()
+
+    /** 爱心层中的一片待绘四边形：槽位中心 X + 是否水平翻转（决定半心填充侧）+ 竖直偏移（抖动用）。 */
+    private class HeartQuad(val cx: Float, val flipU: Boolean, val cy: Float = 0.0f)
 
     fun register() {
         LevelRenderEvents.COLLECT_SUBMITS.register(
@@ -92,6 +134,30 @@ object EntityHealthBarRenderer {
         // 与原版粒子一致，物理按客户端 tick 定步推进；世界冻结（/tick freeze）时不推进。
         if (level.tickRateManager().runsNormally()) {
             HeartParticleManager.tick()
+            tickDeathSequences(minecraft)
+        }
+    }
+
+    /** 推进死亡破碎序列：到点的爱心碎裂为碎片并迸出彩色心粒子，全部炸完即移除序列。 */
+    private fun tickDeathSequences(minecraft: Minecraft) {
+        if (deathSequences.isEmpty()) return
+        val rotation = minecraft.gameRenderer.mainCamera.rotation()
+        val iterator = deathSequences.iterator()
+        while (iterator.hasNext()) {
+            val seq = iterator.next()
+            seq.age++
+            for (heart in seq.hearts) {
+                if (heart.exploded || seq.age < heart.explodeTick) continue
+                heart.exploded = true
+                // 该颗心的世界中心：与血条同基准（局部 +cx 经 scale(-x) 与相机朝向映射到世界）。
+                val offset = Vector3f(-seq.scale * heart.cx, 0.0f, 0.0f)
+                rotation.transform(offset)
+                val hx = seq.worldX + offset.x
+                val hy = seq.worldY + offset.y
+                val hz = seq.worldZ + offset.z
+                HeartParticleManager.spawnContainerShards(hx, hy, hz, rotation, heart.containerTexture)
+            }
+            if (seq.done()) iterator.remove()
         }
     }
 
@@ -108,17 +174,27 @@ object EntityHealthBarRenderer {
         val poseStack = context.poseStack()
         val collector = context.submitNodeCollector()
         val cameraState = context.levelState().cameraRenderState
-        val frame = EntitySelector.buildFrame(minecraft, config, tickProgress, cameraState.cullFrustum) ?: return
+        val cameraPosition = minecraft.gameRenderer.mainCamera.position()
 
-        for (entity in frame.level.entitiesForRendering()) {
-            if (entity !is LivingEntity) continue
-            if (EntitySelector.shouldShow(entity, frame)) {
-                submit(entity, frame, collector, poseStack, cameraState)
+        // 头顶血条：仅当有可显示的目标实体时绘制；正在播放 container 破碎序列的实体跳过，
+        // 否则其静止的 container 会叠在抖动 container 上互相干扰。
+        val frame = EntitySelector.buildFrame(minecraft, config, tickProgress, cameraState.cullFrustum)
+        if (frame != null) {
+            for (entity in frame.level.entitiesForRendering()) {
+                if (entity !is LivingEntity) continue
+                if (isDying(entity.id)) continue
+                if (EntitySelector.shouldShow(entity, frame)) {
+                    submit(entity, frame, collector, poseStack, cameraState)
+                }
             }
         }
 
+        // 死亡破碎序列与掉落粒子独立于目标实体存在（实体已死亡注销），始终自行渲染。
+        if (deathSequences.isNotEmpty()) {
+            renderDeathSequences(collector, poseStack, cameraPosition, tickProgress)
+        }
         if (!HeartParticleManager.isEmpty()) {
-            HeartParticleManager.render(collector, poseStack, frame.cameraPosition, cameraState.orientation, tickProgress)
+            HeartParticleManager.render(collector, poseStack, cameraPosition, cameraState.orientation, tickProgress)
         }
     }
 
@@ -132,7 +208,9 @@ object EntityHealthBarRenderer {
     private fun detectDamage(entity: LivingEntity, cameraPosition: Vec3, config: HealthIndicatorConfig) {
         val current = entity.health
         val previous = lastHealth.put(entity.id, current) ?: return
-        if (current >= previous - 0.01f || current <= 0.0f) return
+        // 仅在“确实掉血”时生成粒子。注意不能因 current<=0 就跳过：致命一击恰恰是掉到 0，
+        // 那一刻同样要让残余爱心爆出（previous>current 已能区分掉血与回血/无变化）。
+        if (current >= previous - 0.01f) return
 
         if (entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z) > config.maxDistanceSquared) return
 
@@ -141,6 +219,15 @@ object EntityHealthBarRenderer {
 
         val hpPerHeart = HeartLayout.hpPerHeart(maxHealth, config)
         if (hpPerHeart <= 0.0f) return
+
+        // 致命一击：登记 container 破碎序列（先抖动预警，再沿扣血方向逐颗炸裂）。
+        // 与掉落爱心粒子相互独立，各自有开关；彩色心走下方逐心粒子，不在序列中重复处理。
+        if (config.containerShatterEnabled && current <= 0.0f && previous > 0.0f) {
+            registerDeath(entity, previous, maxHealth, config)
+        }
+
+        // 掉落爱心粒子总开关：关闭后仅保留（若启用的）container 破碎，不再迸出彩色心。
+        if (!config.damageParticlesEnabled) return
 
         // 本次总伤害决定整批粒子的掉落档次（轻/中/重）。
         val style = HeartParticleManager.styleFor(
@@ -189,8 +276,20 @@ object EntityHealthBarRenderer {
      * 使粒子诞生位置与血条上那颗爱心像素级重合，且与掉血处于同一帧、无缝衔接。
      */
     private fun flushPendingSpawns(minecraft: Minecraft, config: HealthIndicatorConfig, tickProgress: Float) {
-        if (pendingSpawns.isEmpty()) return
+        if (pendingSpawns.isEmpty() && pendingDeaths.isEmpty()) return
         val rotation = minecraft.gameRenderer.mainCamera.rotation()
+
+        // 死亡序列：在死亡处（与血条同基准的世界中心）固定下来，后续逐 tick 自行抖动 + 逐颗炸裂。
+        for (death in pendingDeaths) {
+            if (deathSequences.size >= DEATH_MAX) break
+            val position = death.entity.getPosition(tickProgress)
+            val height = barLocalY(death.entity, config)
+            deathSequences.add(
+                DeathSequence(death.entity.id, position.x, position.y + height, position.z, config.scale, death.hearts),
+            )
+        }
+        pendingDeaths.clear()
+        if (pendingSpawns.isEmpty()) return
         // 屏幕右方在世界中的水平单位向量（billboard 的 scale(-x) 下，局部 +X→屏幕左，故屏幕右= rotation·(+1,0,0)）。
         val screenRight = Vector3f(1.0f, 0.0f, 0.0f)
         rotation.transform(screenRight)
@@ -204,7 +303,7 @@ object EntityHealthBarRenderer {
         for (pending in pendingSpawns) {
             val entity = pending.entity
             val position = entity.getPosition(tickProgress)
-            val height = entity.bbHeight + config.yOffset
+            val height = barLocalY(entity, config)
             val offset = Vector3f(-config.scale * pending.cx, 0.0f, 0.0f)
             rotation.transform(offset)
             // 半心：朝被打掉那侧（屏幕左/右）逸散；满心：无方向偏置、四散。
@@ -222,6 +321,16 @@ object EntityHealthBarRenderer {
             )
         }
         pendingSpawns.clear()
+    }
+
+    /**
+     * 血条（及粒子、破碎序列）所在的局部竖直偏移（方块）。
+     * 取「默认姿态模型真实高度（含马头/耳朵等凸出网格）」与碰撞箱高度的较大者，再加 [HealthIndicatorConfig.yOffset]，
+     * 使血条稳定落在生物最高点之上——对头部远高于碰撞箱的生物（如马）不再压头。
+     */
+    private fun barLocalY(entity: LivingEntity, config: HealthIndicatorConfig): Double {
+        val modelTop = EntityModelExtents.get(entity)?.height?.toDouble() ?: 0.0
+        return max(modelTop, entity.bbHeight.toDouble()) + config.yOffset
     }
 
     /** 某颗心当前填充对应的半心数（0/1/2），阈值与渲染填充判定保持一致。 */
@@ -246,7 +355,7 @@ object EntityHealthBarRenderer {
             position.y - cameraPosition.y,
             position.z - cameraPosition.z,
         )
-        val barHeight = entity.bbHeight + config.yOffset
+        val barHeight = barLocalY(entity, config)
         val distanceSq = entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z)
         val healthRatio = (entity.health / entity.maxHealth).coerceIn(0.0f, 1.0f)
 
@@ -354,20 +463,7 @@ object EntityHealthBarRenderer {
         val fillFlip = config.drainFromRight
         for (slot in view.slots) {
             add(containerLayer, HeartGraphics.CONTAINER, slot.cx, false)
-            when (slot.top) {
-                // 满心：直接画当前层满心（满心对称，flipU 无意义）。
-                HeartLayout.Top.FULL -> add(heartLayer, slot.topTier.full, slot.cx, false)
-                // 空缺：有下层则露出下层满心颜色；无下层就只剩 container（黑底）。
-                HeartLayout.Top.NONE -> slot.baseTier?.let { add(heartLayer, it.full, slot.cx, false) }
-                HeartLayout.Top.HALF -> if (slot.baseTier != null) {
-                    // 多层半心：左右两片互补异色半心并排（同层同深度、像素互不重叠），避免与下层冲突。
-                    add(heartLayer, slot.topTier.half, slot.cx, fillFlip) // 保留侧：当前层颜色
-                    add(heartLayer, slot.baseTier.half, slot.cx, !fillFlip) // 空缺侧：下层颜色
-                } else {
-                    // 单层半心：保留侧画当前层颜色，另一侧露出黑色 container。
-                    add(heartLayer, slot.topTier.half, slot.cx, fillFlip)
-                }
-            }
+            for (q in topHeartQuads(slot, fillFlip)) add(heartLayer, q.texture, slot.cx, q.flipU)
         }
 
         // 把“世界深度偏移”换算为 billboard 局部 z：billboard 会以 config.scale 缩放局部坐标，故局部 z = 世界偏移 / scale。
@@ -395,8 +491,74 @@ object EntityHealthBarRenderer {
             collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture)) { pose, consumer ->
                 val m = pose.pose()
                 for (q in quads) {
-                    HeartGraphics.quad(consumer, m, q.cx - halfSize, -halfSize, q.cx + halfSize, halfSize, WHITE, q.flipU, z)
+                    HeartGraphics.quad(consumer, m, q.cx - halfSize, q.cy - halfSize, q.cx + halfSize, q.cy + halfSize, WHITE, q.flipU, z)
                 }
+            }
+        }
+    }
+
+    /** 计算某槽位「彩色爱心层」要绘制的贴图片（与活体血条一致），供血条与死亡序列复用。 */
+    private fun topHeartQuads(slot: HeartLayout.Slot, fillFlip: Boolean): List<TexQuad> = when (slot.top) {
+        // 满心：直接画当前层满心（满心对称，flipU 无意义）。
+        HeartLayout.Top.FULL -> listOf(TexQuad(slot.topTier.full, false))
+        // 空缺：有下层则露出下层满心颜色；无下层就只剩 container（黑底）。
+        HeartLayout.Top.NONE -> slot.baseTier?.let { listOf(TexQuad(it.full, false)) } ?: emptyList()
+        HeartLayout.Top.HALF -> if (slot.baseTier != null) {
+            // 多层半心：左右两片互补异色半心并排（同层同深度、像素互不重叠），避免与下层冲突。
+            listOf(TexQuad(slot.topTier.half, fillFlip), TexQuad(slot.baseTier.half, !fillFlip))
+        } else {
+            // 单层半心：保留侧画当前层颜色，另一侧露出黑色 container。
+            listOf(TexQuad(slot.topTier.half, fillFlip))
+        }
+    }
+
+    /** 该实体是否正在播放 container 破碎序列（含待起爆），用于抑制其活体血条。 */
+    private fun isDying(entityId: Int): Boolean =
+        deathSequences.any { it.entityId == entityId } || pendingDeaths.any { it.entity.id == entityId }
+
+    /**
+     * 致命一击时登记一条 container 破碎序列：按死亡前血量快照取整排槽位位置与炸裂时刻。
+     * 沿扣血方向逐颗炸裂——最先清空的那侧（最高 logical，即 slots 末尾）最先炸，依次铺开。
+     */
+    private fun registerDeath(entity: LivingEntity, previous: Float, maxHealth: Float, config: HealthIndicatorConfig) {
+        val slots = HeartLayout.compute(previous, maxHealth, config).slots
+        val n = slots.size
+        if (n == 0) return
+        val hearts = ArrayList<DeathHeart>(n)
+        for ((i, slot) in slots.withIndex()) {
+            // slots 按 logical 升序；最高 logical（末尾）最先清空，故 rank=0（最先炸）对应末尾。
+            val rank = n - 1 - i
+            val explodeTick = DEATH_SHAKE_TICKS + if (n <= 1) 0 else rank * DEATH_EXPLODE_TICKS / n
+            hearts.add(DeathHeart(slot.cx, HeartGraphics.CONTAINER, explodeTick, (Math.random() * Math.PI * 2.0).toFloat()))
+        }
+        pendingDeaths.add(PendingDeath(entity, hearts))
+    }
+
+    /** 渲染所有进行中的 container 破碎序列：未炸裂的 container 在原位高频抖动，已炸裂的让位给碎片。 */
+    private fun renderDeathSequences(
+        collector: SubmitNodeCollector,
+        poseStack: PoseStack,
+        cameraPosition: Vec3,
+        partialTick: Float,
+    ) {
+        val halfSize = HeartGraphics.SIZE / 2.0f
+        for (seq in deathSequences) {
+            val base = Vec3(seq.worldX - cameraPosition.x, seq.worldY - cameraPosition.y, seq.worldZ - cameraPosition.z)
+            val ageRender = seq.age + partialTick
+            val ampFactor = 0.4f + 0.6f * min(1.0f, ageRender / DEATH_SHAKE_TICKS)
+            val amp = DEATH_SHAKE_AMP * HeartGraphics.SIZE * ampFactor
+
+            val containerLayer = LinkedHashMap<Identifier, MutableList<HeartQuad>>()
+            for (heart in seq.hearts) {
+                if (heart.exploded) continue
+                // 逐心错相位的高频抖动：x/y 不同频率，呈现紧张的“颤抖”而非整齐平移。
+                val ox = sin(ageRender * DEATH_SHAKE_FREQ + heart.phase) * amp
+                val oy = sin(ageRender * DEATH_SHAKE_FREQ * 1.3f + heart.phase * 1.7f) * amp
+                containerLayer.getOrPut(heart.containerTexture) { ArrayList() }.add(HeartQuad(heart.cx + ox, false, oy))
+            }
+
+            billboard(poseStack, base, 0.0, seq.scale) {
+                drawHeartLayer(collector, poseStack, containerLayer, halfSize, 0.0f)
             }
         }
     }

@@ -74,6 +74,30 @@ object HeartGraphics {
         vertex(consumer, matrix, left, top, uLeft, 0.0f, color, z)
     }
 
+    /**
+     * 绘制贴图的一块「子矩形」（用于碎裂碎片：每片取心形贴图的一格 UV）。
+     * @param u0,v0 子矩形左上 UV；@param u1,v1 右下 UV。
+     */
+    fun quadUv(
+        consumer: VertexConsumer,
+        matrix: Matrix4f,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        u0: Float,
+        v0: Float,
+        u1: Float,
+        v1: Float,
+        color: Int,
+        z: Float = 0.0f,
+    ) {
+        vertex(consumer, matrix, left, bottom, u0, v1, color, z)
+        vertex(consumer, matrix, right, bottom, u1, v1, color, z)
+        vertex(consumer, matrix, right, top, u1, v0, color, z)
+        vertex(consumer, matrix, left, top, u0, v0, color, z)
+    }
+
     private fun vertex(consumer: VertexConsumer, matrix: Matrix4f, x: Float, y: Float, u: Float, v: Float, color: Int, z: Float) {
         consumer.addVertex(matrix, x, y, z)
             .setColor(color)
