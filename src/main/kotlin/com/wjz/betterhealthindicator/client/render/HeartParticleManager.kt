@@ -86,9 +86,9 @@ object HeartParticleManager {
     fun styleFor(damage: Float, medium: Float, heavy: Float, shakeScale: Float): ParticleStyle {
         val s = shakeScale.coerceAtLeast(0.0f)
         return when {
-            damage > heavy -> ParticleStyle(3.0f, 0.20f * s, 0.46f * s, 28.0f * s, 0.14f * s, 2.5, 0.45)
-            damage >= medium -> ParticleStyle(2.0f, 0.12f * s, 0.14f * s, 9.0f * s, 0.0f, 2.0, 0.7)
-            else -> ParticleStyle(1.5f, 0.08f * s, 0.07f * s, 5.0f * s, 0.0f, 1.5, 1.0)
+            damage > heavy -> ParticleStyle(5.5f, 0.17f * s, 0.36f * s, 28.0f * s, 0.14f * s, 2.5, 0.45)
+            damage >= medium -> ParticleStyle(4.0f, 0.12f * s, 0.24f * s, 9.0f * s, 0.0f, 2.0, 0.7)
+            else -> ParticleStyle(3.0f, 0.08f * s, 0.07f * s, 5.0f * s, 0.0f, 1.5, 1.0)
         }
     }
 
