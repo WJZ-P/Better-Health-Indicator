@@ -30,6 +30,15 @@ enum class PanelCorner {
     TOP_RIGHT,
 }
 
+/** 面板内 3D 模型视口的边框形状。 */
+enum class PanelFrameShape {
+    /** 正方形边框（默认）。 */
+    SQUARE,
+
+    /** 圆形边框（模型缩放至内切圆内）。 */
+    CIRCLE,
+}
+
 /** 血量到爱心数量的换算方式。 */
 enum class HealthMode {
     /** 绝对血量：严格 1 颗心 = 2HP，心数随血量增长；高血量启用分层异色（默认）。 */
@@ -61,8 +70,12 @@ class HealthIndicatorConfig {
     var relativeHeartCount: Int = Defaults.RELATIVE_HEART_COUNT
     var showName: Boolean = Defaults.SHOW_NAME
     var showHealthText: Boolean = Defaults.SHOW_HEALTH_TEXT
-    // 名字/血量文本相对原版名牌字号的倍率（自绘文本，1.0 = 原版大小）。
+    // 名字文本相对原版名牌字号的倍率（自绘文本，1.0 = 原版大小）。
     var textScale: Double = Defaults.TEXT_SCALE
+    // 血量数值文本相对原版名牌字号的倍率，默认比名字略小以作区分。
+    var healthTextScale: Double = Defaults.HEALTH_TEXT_SCALE
+    // 文本是否加粗（位图字体无连续字重，仅能通过 BOLD 样式加粗）。
+    var textBold: Boolean = Defaults.TEXT_BOLD
     var occludeBehindWalls: Boolean = Defaults.OCCLUDE_BEHIND_WALLS
     var showFullHealthEntities: Boolean = Defaults.SHOW_FULL_HEALTH_ENTITIES
     var showSelf: Boolean = Defaults.SHOW_SELF
@@ -87,6 +100,7 @@ class HealthIndicatorConfig {
     // 屏幕面板
     var panelEnabled: Boolean = Defaults.PANEL_ENABLED
     var panelCorner: PanelCorner = Defaults.PANEL_CORNER
+    var panelFrameShape: PanelFrameShape = Defaults.PANEL_FRAME_SHAPE
     var panelShowModel: Boolean = Defaults.PANEL_SHOW_MODEL
     var panelScale: Float = Defaults.PANEL_SCALE
     // 受击兜底追踪：攻击某生物后，在有效期内即使没有其他可渲染目标，也以最低优先级兜底显示它。
@@ -114,6 +128,8 @@ class HealthIndicatorConfig {
         const val SHOW_NAME: Boolean = true
         const val SHOW_HEALTH_TEXT: Boolean = false
         const val TEXT_SCALE: Double = 1.0
+        const val HEALTH_TEXT_SCALE: Double = 0.7
+        const val TEXT_BOLD: Boolean = false
         const val OCCLUDE_BEHIND_WALLS: Boolean = true
         const val SHOW_FULL_HEALTH_ENTITIES: Boolean = true
         const val SHOW_SELF: Boolean = false
@@ -133,6 +149,7 @@ class HealthIndicatorConfig {
 
         const val PANEL_ENABLED: Boolean = true
         val PANEL_CORNER: PanelCorner = PanelCorner.TOP_LEFT
+        val PANEL_FRAME_SHAPE: PanelFrameShape = PanelFrameShape.SQUARE
         const val PANEL_SHOW_MODEL: Boolean = true
         const val PANEL_SCALE: Float = 1.0f
         const val PANEL_TRACK_ATTACKED: Boolean = true

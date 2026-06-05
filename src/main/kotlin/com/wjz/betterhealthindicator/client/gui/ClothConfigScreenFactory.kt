@@ -5,6 +5,7 @@ import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.DisplayMode
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig.Defaults
 import com.wjz.betterhealthindicator.config.PanelCorner
+import com.wjz.betterhealthindicator.config.PanelFrameShape
 import me.shedaniel.clothconfig2.api.ConfigBuilder
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
@@ -70,12 +71,28 @@ object ClothConfigScreenFactory {
                 .build(),
         )
         head.addEntry(
-            entry.startDoubleField(Component.literal("文本字号倍率"), config.textScale)
+            entry.startDoubleField(Component.literal("名字字号倍率"), config.textScale)
                 .setMin(0.3)
                 .setMax(3.0)
                 .setDefaultValue(Defaults.TEXT_SCALE)
-                .setTooltip(Component.literal("名字/血量文本相对原版名牌字号的倍率，1.0 即原版大小"))
+                .setTooltip(Component.literal("名字文本相对原版名牌字号的倍率，1.0 即原版大小"))
                 .setSaveConsumer { config.textScale = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startDoubleField(Component.literal("血量数值字号倍率"), config.healthTextScale)
+                .setMin(0.3)
+                .setMax(3.0)
+                .setDefaultValue(Defaults.HEALTH_TEXT_SCALE)
+                .setTooltip(Component.literal("血量数值相对原版名牌字号的倍率，可调小以与名字区分"))
+                .setSaveConsumer { config.healthTextScale = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startBooleanToggle(Component.literal("文本加粗"), config.textBold)
+                .setDefaultValue(Defaults.TEXT_BOLD)
+                .setTooltip(Component.literal("位图字体无连续字重，开启后用 BOLD 样式加粗名字与血量"))
+                .setSaveConsumer { config.textBold = it }
                 .build(),
         )
         head.addEntry(
@@ -158,6 +175,13 @@ object ClothConfigScreenFactory {
             entry.startEnumSelector(Component.literal("面板位置"), PanelCorner::class.java, config.panelCorner)
                 .setDefaultValue(Defaults.PANEL_CORNER)
                 .setSaveConsumer { config.panelCorner = it }
+                .build(),
+        )
+        panel.addEntry(
+            entry.startEnumSelector(Component.literal("模型边框形状"), PanelFrameShape::class.java, config.panelFrameShape)
+                .setDefaultValue(Defaults.PANEL_FRAME_SHAPE)
+                .setTooltip(Component.literal("面板内 3D 模型视口的边框：正方形或圆形"))
+                .setSaveConsumer { config.panelFrameShape = it }
                 .build(),
         )
         panel.addEntry(

@@ -9,12 +9,14 @@ import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
+import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.Font
 import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.client.renderer.state.level.CameraRenderState
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.MutableComponent
 import net.minecraft.resources.Identifier
 import net.minecraft.util.LightCoordsUtil
 import net.minecraft.world.entity.LivingEntity
@@ -37,13 +39,31 @@ import kotlin.math.sqrt
  */
 object EntityHealthBarRenderer {
     private const val WHITE = -1
-    private const val LINE_GAP = +0.2f
+    private const val LINE_GAP = +0.1f
     private const val MAX_PARTICLE_BURST = 20
 
     // 原版浮空名牌的基准字号（局部缩放）；自绘文本以此为基准再乘以 config.textScale。
     private const val NAME_TAG_SCALE = 0.025f
-    // 文本背景板颜色（半透明黑，alpha 64），与原版名牌默认观感一致。
-    private const val TEXT_BACKGROUND = 0x40000000
+    // —— 文本配色（统一在此调整）——
+    // 名字与血量之间的分隔符 / 斜杠颜色（中性灰）。
+    private const val SEPARATOR_COLOR = 0xAAAAAA
+
+    // 当前血量：按「当前/最大」比例分档着色（高=绿、中=黄、残血=红）。
+    private const val HEALTH_HIGH_RATIO = 0.5f
+    private const val HEALTH_MID_RATIO = 0.25f
+    private const val HEALTH_HIGH_COLOR = 0x55FF55
+    private const val HEALTH_MID_COLOR = 0xFFFF55
+    private const val HEALTH_LOW_COLOR = 0xFF5555
+
+    // 最大血量：按绝对血量分档着色，模拟「稀有度渐变」灰→绿→蓝→紫→橙。
+    // 每项为 (血量上限, 颜色)，小于该上限取此色；超过所有档位则用 MAX_HEALTH_TOP_COLOR。
+    private val MAX_HEALTH_TIERS = arrayOf(
+        20f to 0xAAAAAA, // 凡品：灰
+        50f to 0x55FF55, // 优秀：绿
+        100f to 0x55AAFF, // 精良：蓝
+        200f to 0xAA55FF, // 史诗：紫
+    )
+    private const val MAX_HEALTH_TOP_COLOR = 0xFFAA00 // 传说：橙
 
     // 爱心相对 container 朝相机方向的“深度偏移量”，按世界单位/每格距离取值（模拟 polygon offset）。
     // 固定的局部 z 偏移会让偏离屏幕中心的心产生横向投影位移（越靠边越大 → 整排被剪切成斜的，即“歪”）；
@@ -372,69 +392,113 @@ object EntityHealthBarRenderer {
             BarStyle.NUMERIC -> {} // 数值样式仅显示文本
         }
 
+        val nameScale = NAME_TAG_SCALE * config.textScale.toFloat()
         if (heartMultiplier > 0) {
             // 超出调色板层数的高血量生物，在血条上方标注「共多少管血」。
-            val text = Component.literal("x$heartMultiplier")
-            submitText3d(collector, poseStack, base, barHeight + LINE_GAP * 3, text, config, cameraState)
+            val seg = listOf(TextSegment(styled(Component.literal("x$heartMultiplier"), config), nameScale))
+            submitTextLine(collector, poseStack, base, barHeight + LINE_GAP * 5, seg, config, cameraState)
         }
 
-        // 名字与血量数值合并为同一行：名字在前、血量数值在后（血量默认关闭）。
+        // 名字 + 血量数值同一行：名字保留自定义命名颜色；血量单独着色、单独字号，并用彩色分隔符隔开。
         val showHp = config.showHealthText || config.barStyle == BarStyle.NUMERIC
-        val label: Component? = when {
-            config.showName && showHp ->
-                entity.displayName.copy().append(Component.literal("  ${healthText(entity)}"))
-            config.showName -> entity.displayName
-            showHp -> Component.literal(healthText(entity))
-            else -> null
+        val segments = ArrayList<TextSegment>(3)
+        if (config.showName) {
+            val nameComp: Component =
+                if (config.textBold) entity.displayName.copy().withStyle(ChatFormatting.BOLD) else entity.displayName
+            segments.add(TextSegment(nameComp, nameScale))
         }
-        if (label != null) {
+        if (showHp) {
+            if (config.showName) {
+                segments.add(TextSegment(styled(Component.literal(" | ").withColor(SEPARATOR_COLOR), config), nameScale))
+            }
+            val hpScale = NAME_TAG_SCALE * config.healthTextScale.toFloat()
+            segments.add(TextSegment(healthComponent(entity, healthRatio, config), hpScale))
+        }
+        if (segments.isNotEmpty()) {
             // 数值样式无血条几何，文本落在血条基准高度；其余样式落在血条上方。
-            val labelY = if (config.barStyle == BarStyle.NUMERIC) barHeight else barHeight + LINE_GAP * 2
-            submitText3d(collector, poseStack, base, labelY, label, config, cameraState)
+            val labelY = if (config.barStyle == BarStyle.NUMERIC) barHeight else barHeight + LINE_GAP * 2.5
+            submitTextLine(collector, poseStack, base, labelY, segments, config, cameraState)
         }
     }
 
-    private fun healthText(entity: LivingEntity): String =
-        "${ceil(entity.health).toInt()} / ${ceil(entity.maxHealth).toInt()}"
+    /** 构造「当前 / 最大」血量文本：当前值按比例着色（绿/黄/红），最大值按绝对血量分档着色。 */
+    private fun healthComponent(entity: LivingEntity, ratio: Float, config: HealthIndicatorConfig): Component {
+        val current = ceil(entity.health).toInt()
+        val max = ceil(entity.maxHealth).toInt()
+        val comp = Component.empty()
+            .append(Component.literal("$current").withColor(healthRatioColor(ratio)))
+            .append(Component.literal(" / ").withColor(SEPARATOR_COLOR))
+            .append(Component.literal("$max").withColor(maxHealthColor(entity.maxHealth)))
+        return styled(comp, config)
+    }
+
+    /** 按需为文本套用加粗样式。 */
+    private fun styled(component: MutableComponent, config: HealthIndicatorConfig): MutableComponent =
+        if (config.textBold) component.withStyle(ChatFormatting.BOLD) else component
+
+    /** 当前血量颜色：按当前/最大比例分档，高=绿、中=黄、残血=红。 */
+    private fun healthRatioColor(ratio: Float): Int = when {
+        ratio > HEALTH_HIGH_RATIO -> HEALTH_HIGH_COLOR
+        ratio > HEALTH_MID_RATIO -> HEALTH_MID_COLOR
+        else -> HEALTH_LOW_COLOR
+    }
+
+    /** 最大血量颜色：按绝对血量沿稀有度渐变分档（与当前血量配色区分），体现生物「血厚程度」。 */
+    private fun maxHealthColor(maxHealth: Float): Int {
+        for ((upperBound, color) in MAX_HEALTH_TIERS) {
+            if (maxHealth < upperBound) return color
+        }
+        return MAX_HEALTH_TOP_COLOR
+    }
+
+    /** 一行内的文本片段：各自的 [Component]（含颜色样式）与最终世界缩放系数。 */
+    private data class TextSegment(val text: Component, val scale: Float)
 
     /**
-     * 自绘浮空文本（替代原版 submitNameTag），支持通过 [HealthIndicatorConfig.textScale] 调节字号。
-     * billboard：平移到目标点 → 朝向相机 → 翻转并按 [NAME_TAG_SCALE]×textScale 缩放，再水平居中提交。
+     * 自绘浮空文本行（替代原版 submitNameTag）：支持同一行内多段、各段独立字号与颜色。
+     * 各段按世界宽度水平拼接并整体居中，并按行高在垂直方向居中对齐。
      */
-    private fun submitText3d(
+    private fun submitTextLine(
         collector: SubmitNodeCollector,
         poseStack: PoseStack,
         base: Vec3,
         localY: Double,
-        text: Component,
+        segments: List<TextSegment>,
         config: HealthIndicatorConfig,
         cameraState: CameraRenderState,
     ) {
         val font = Minecraft.getInstance().font
-        val width = font.width(text)
         // occludeBehindWalls：true 走 NORMAL（被墙体遮挡），false 走 SEE_THROUGH（始终可见）。
         val displayMode = if (config.occludeBehindWalls) Font.DisplayMode.NORMAL else Font.DisplayMode.SEE_THROUGH
-        val scale = NAME_TAG_SCALE * config.textScale.toFloat()
-        poseStack.pushPose()
-        try {
-            poseStack.translate(base.x, base.y + localY, base.z)
-            poseStack.mulPose(cameraState.orientation)
-            // 仅翻转 Y（文本 Y 向下、世界 Y 向上）；X 必须保持正，否则四边形绕序反转被字体渲染剔除。
-            poseStack.scale(scale, -scale, scale)
-            collector.submitText(
-                poseStack,
-                -width / 2.0f,
-                0.0f,
-                text.visualOrderText,
-                false,
-                displayMode,
-                LightCoordsUtil.FULL_BRIGHT,
-                WHITE,
-                TEXT_BACKGROUND,
-                0,
-            )
-        } finally {
-            poseStack.popPose()
+        val totalWorld = segments.sumOf { (font.width(it.text) * it.scale).toDouble() }.toFloat()
+        var penWorld = -totalWorld / 2.0f
+        for (seg in segments) {
+            val segWorldWidth = font.width(seg.text) * seg.scale
+            val halfHeight = font.lineHeight * seg.scale / 2.0f
+            poseStack.pushPose()
+            try {
+                poseStack.translate(base.x, base.y + localY, base.z)
+                poseStack.mulPose(cameraState.orientation)
+                // 在 billboard 空间内沿世界单位推进笔位（左边缘），并上移半个行高做垂直居中。
+                poseStack.translate(penWorld.toDouble(), halfHeight.toDouble(), 0.0)
+                // 仅翻转 Y；X 必须保持正，否则四边形绕序反转被字体渲染剔除。
+                poseStack.scale(seg.scale, -seg.scale, seg.scale)
+                collector.submitText(
+                    poseStack,
+                    0.0f,
+                    0.0f,
+                    seg.text.visualOrderText,
+                    true,
+                    displayMode,
+                    LightCoordsUtil.FULL_BRIGHT,
+                    WHITE,
+                    0,
+                    0,
+                )
+            } finally {
+                poseStack.popPose()
+            }
+            penWorld += segWorldWidth
         }
     }
 

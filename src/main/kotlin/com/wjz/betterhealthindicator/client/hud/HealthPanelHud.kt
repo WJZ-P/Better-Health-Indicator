@@ -3,6 +3,7 @@ package com.wjz.betterhealthindicator.client.hud
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.PanelCorner
+import com.wjz.betterhealthindicator.config.PanelFrameShape
 import com.wjz.betterhealthindicator.client.render.EntityModelExtents
 import com.wjz.betterhealthindicator.client.render.EntitySelector
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
@@ -11,6 +12,7 @@ import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.minecraft.client.Minecraft
 import net.minecraft.world.InteractionResult
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
@@ -22,6 +24,7 @@ import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * 屏幕角落血量面板：框 + 关注生物的实时 3D 模型 + 名字与血量信息。
@@ -35,10 +38,25 @@ object HealthPanelHud {
     private const val MARGIN = 2
     private const val PADDING = 2
 
-    private const val PANEL_BACKGROUND = 0x90101018.toInt()
+    // —— 面板与边框配色（统一在此调整）——
+    // 面板整体背景（轻微竖向渐变，半透明）。
+    private const val PANEL_BG_TOP = 0xC0121218.toInt()
+    private const val PANEL_BG_BOTTOM = 0xC006060A.toInt()
+    // 圆形视口内底（不透明，竖向渐变营造纵深）。
+    private const val FRAME_BG_TOP = 0xFF1C1C28.toInt()
+    private const val FRAME_BG_BOTTOM = 0xFF0C0C14.toInt()
+    // 圆形视口边框颜色与粗细（像素）。
+    private const val FRAME_BORDER_COLOR = 0xFF4A4A5C.toInt()
+    private const val FRAME_BORDER_THICKNESS = 1
+
+    // 正方形边框直接复用原版「未选中快捷栏格」贴图（26×26，拉伸缩放）。
+    private val SLOT_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
+    private const val SLOT_NATIVE_SIZE = 26.0f
+    private const val SLOT_NATIVE_BORDER = 2.0f // 贴图斜角边框占用的像素，用于按比例内缩模型框
     private const val BAR_BACKGROUND = 0xC0202020.toInt()
     private const val TEXT_COLOR = 0xFFFFFFFF.toInt()
     private const val MODEL_PITCH = -15.0f
+    private const val SQRT2 = 1.41421356f
 
     // 模型在渲染框中占用的比例（留少量边距，避免模型网格略超碰撞箱时贴边）。
     private const val MODEL_FILL_RATIO = 0.9f
@@ -79,20 +97,24 @@ object HealthPanelHud {
                 }
                 val panelY = MARGIN
 
-                graphics.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, PANEL_BACKGROUND)
+                graphics.fillGradient(
+                    panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, PANEL_BG_TOP, PANEL_BG_BOTTOM,
+                )
 
-                val modelX0 = panelX + PADDING
-                val modelY0 = panelY + PADDING
-                val modelBox = PANEL_HEIGHT - PADDING * 2
-                val modelX1 = modelX0 + modelBox
-                val modelY1 = modelY0 + modelBox
+                // 模型视口：左侧正方形区域，按形状绘制边框，并返回模型可绘制的内框。
+                val frameX0 = panelX + PADDING
+                val frameY0 = panelY + PADDING
+                val frameSize = PANEL_HEIGHT - PADDING * 2
+                val frameX1 = frameX0 + frameSize
+                val frameY1 = frameY0 + frameSize
 
+                val inner = drawModelFrame(graphics, config.panelFrameShape, frameX0, frameY0, frameX1, frameY1)
                 if (config.panelShowModel) {
-                    renderEntityModel(graphics, target, modelX0, modelY0, modelX1, modelY1)
+                    renderEntityModel(graphics, target, inner[0], inner[1], inner[2], inner[3])
                 }
 
                 val font = minecraft.font
-                val textX = modelX1 + 6
+                val textX = frameX1 + 6
                 graphics.text(font, target.displayName, textX, panelY + 6, TEXT_COLOR, false)
 
                 val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
@@ -189,6 +211,76 @@ object HealthPanelHud {
         relative = ((relative % 360.0f) + 540.0f) % 360.0f - 180.0f
         return relative
     }
+
+    /**
+     * 绘制模型视口边框（正方形/圆形），返回模型可绘制的内框 [x0, y0, x1, y1]。
+     * 圆形采用扫描线程序绘制（无需贴图）；模型内框取内切正方形，确保模型不溢出圆外。
+     */
+    private fun drawModelFrame(
+        graphics: GuiGraphicsExtractor,
+        shape: PanelFrameShape,
+        x0: Int,
+        y0: Int,
+        x1: Int,
+        y1: Int,
+    ): IntArray {
+        val t = FRAME_BORDER_THICKNESS
+        return when (shape) {
+            PanelFrameShape.SQUARE -> {
+                val size = x1 - x0
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SLOT_SPRITE, x0, y0, size, y1 - y0)
+                // 模型框按贴图边框比例内缩，避免模型压到斜角边框。
+                val inset = (size * SLOT_NATIVE_BORDER / SLOT_NATIVE_SIZE).toInt().coerceAtLeast(2)
+                intArrayOf(x0 + inset, y0 + inset, x1 - inset, y1 - inset)
+            }
+
+            PanelFrameShape.CIRCLE -> {
+                val radius = (x1 - x0) / 2
+                val cx = x0 + radius
+                val cy = y0 + radius
+                fillDisk(graphics, cx, cy, radius, FRAME_BORDER_COLOR)
+                fillDiskGradient(graphics, cx, cy, radius - t, FRAME_BG_TOP, FRAME_BG_BOTTOM)
+                // 内切正方形：半边长 = (半径 - 边框) / √2，模型限制其中即不会越出圆周。
+                val half = ((radius - t) / SQRT2).toInt()
+                intArrayOf(cx - half, cy - half, cx + half, cy + half)
+            }
+        }
+    }
+
+    /** 扫描线填充实心圆盘（每行一条 1px 高的水平条）。 */
+    private fun fillDisk(graphics: GuiGraphicsExtractor, cx: Int, cy: Int, r: Int, color: Int) {
+        var dy = -r
+        while (dy <= r) {
+            val halfWidth = sqrt((r * r - dy * dy).toFloat()).toInt()
+            graphics.fill(cx - halfWidth, cy + dy, cx + halfWidth, cy + dy + 1, color)
+            dy++
+        }
+    }
+
+    /** 扫描线填充竖向渐变圆盘。 */
+    private fun fillDiskGradient(graphics: GuiGraphicsExtractor, cx: Int, cy: Int, r: Int, top: Int, bottom: Int) {
+        if (r <= 0) return
+        var dy = -r
+        while (dy <= r) {
+            val halfWidth = sqrt((r * r - dy * dy).toFloat()).toInt()
+            val color = lerpColor(top, bottom, (dy + r).toFloat() / (2 * r))
+            graphics.fill(cx - halfWidth, cy + dy, cx + halfWidth, cy + dy + 1, color)
+            dy++
+        }
+    }
+
+    /** 按比例 t∈[0,1] 在两个 ARGB 颜色间线性插值。 */
+    private fun lerpColor(from: Int, to: Int, t: Float): Int {
+        val s = t.coerceIn(0.0f, 1.0f)
+        val a = lerpChannel(from ushr 24, to ushr 24, s)
+        val r = lerpChannel((from ushr 16) and 0xFF, (to ushr 16) and 0xFF, s)
+        val g = lerpChannel((from ushr 8) and 0xFF, (to ushr 8) and 0xFF, s)
+        val b = lerpChannel(from and 0xFF, to and 0xFF, s)
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun lerpChannel(from: Int, to: Int, t: Float): Int =
+        (from + (to - from) * t).toInt().coerceIn(0, 255)
 
     private fun healthColor(ratio: Float): Int {
         val red: Int
