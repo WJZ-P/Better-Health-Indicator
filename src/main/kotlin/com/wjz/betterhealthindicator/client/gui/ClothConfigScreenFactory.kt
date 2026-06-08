@@ -114,7 +114,7 @@ object ClothConfigScreenFactory {
         head.addEntry(
             entry.startBooleanToggle(Component.literal("文本加粗"), config.textBold)
                 .setDefaultValue(Defaults.TEXT_BOLD)
-                .setTooltip(Component.literal("位图字体无连续字重，开启后用 BOLD 样式加粗名字与血量"))
+                .setTooltip(Component.literal("开启后文本将会变成粗体"))
                 .setSaveConsumer { config.textBold = it }
                 .build(),
         )

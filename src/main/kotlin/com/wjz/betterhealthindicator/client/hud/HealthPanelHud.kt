@@ -40,8 +40,8 @@ object HealthPanelHud {
 
     // —— 面板与边框配色（统一在此调整）——
     // 面板整体背景（轻微竖向渐变，半透明）。
-    private const val PANEL_BG_TOP = 0xC0121218.toInt()
-    private const val PANEL_BG_BOTTOM = 0xC006060A.toInt()
+    private const val PANEL_BG_TOP = 0xC01E1E26.toInt()
+    private const val PANEL_BG_BOTTOM = 0xC0101016.toInt()
     // 圆形视口内底（不透明，竖向渐变营造纵深）。
     private const val FRAME_BG_TOP = 0xFF1C1C28.toInt()
     private const val FRAME_BG_BOTTOM = 0xFF0C0C14.toInt()
@@ -61,8 +61,25 @@ object HealthPanelHud {
     private val HOTBAR_SELECTION_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
     private const val HOTBAR_SELECTION_NATIVE_SIZE = 22.0f
     private const val HOTBAR_SELECTION_NATIVE_BORDER = 2.0f // 选中框白边占用像素，用于按比例内缩模型框
-    private const val BAR_BACKGROUND = 0xC0202020.toInt()   // 整个面板背景色
     private const val TEXT_COLOR = 0xFFFFFFFF.toInt()
+
+    // —— 面板立体边框：最外深色描边 + 内一圈外凸 bevel（顶/左高光，底/右阴影）——
+    private const val PANEL_BORDER = 0xD0000000.toInt()
+    private const val BEVEL_HIGHLIGHT = 0x40FFFFFF.toInt()
+    private const val BEVEL_SHADOW = 0x55000000.toInt()
+
+    // —— 血条配色：凹槽底 + 描边 + 前景顶部高光（凹槽与面板底色均较初版提亮约 10%，不至于太暗）——
+    private const val BAR_TRACK = 0xD024242A.toInt()
+    private const val BAR_BORDER = 0xFF000000.toInt()
+    private const val BAR_GLOSS = 0x55FFFFFF.toInt() // 前景高光（以棋盘格颗粒方式打点，半覆盖故透明度略高）
+
+    // —— 血条前景按血量三档着色（荧光亮色填充）；血量数字统一纯白，避免与填充色冲突 ——
+    private const val FILL_HEALTHY = 0xFF29A33D.toInt() // >50% 荧光史莱姆绿
+    private const val FILL_WARNING = 0xFFA37029.toInt() // 20%~50% 明亮金黄
+    private const val FILL_DANGER = 0xFFA32929.toInt()  // <20% 刺目鲜红
+    // 血量数字（当前/最大）浅灰；分隔符 "/" 用更暗的中灰以作区分。
+    private const val HEALTH_NUM_TEXT = 0xFFFFFF
+    private const val HEALTH_NUM_SEP = 0xAAAAAA
     private const val MODEL_PITCH = -15.0f  //  3D模型的俯视角
     private const val SQRT2 = 1.41421356f
 
@@ -94,9 +111,7 @@ object HealthPanelHud {
                 }
                 val panelY = MARGIN
 
-                graphics.fillGradient(
-                    panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, PANEL_BG_TOP, PANEL_BG_BOTTOM,
-                )
+                drawPanelBackground(graphics, panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT)
 
                 // 模型视口：左侧正方形区域，按形状绘制边框，并返回模型可绘制的内框。
                 val frameX0 = panelX + PADDING
@@ -115,20 +130,15 @@ object HealthPanelHud {
                 val bold = config.panelTextBold
                 val nameText =
                     if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName
-                graphics.text(font, nameText, textX, panelY + 6, TEXT_COLOR, false)
+                graphics.text(font, nameText, textX, panelY + 6, TEXT_COLOR, true)
 
+                // 血条：凹槽 + 描边 + 随血量红→黄→绿渐变前景 + 顶部高光，血量数值居中叠加其上。
                 val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
                 val barX0 = textX
-                val barY0 = panelY + 20
-                val barX1 = panelX + PANEL_WIDTH - PADDING - 3
-                val barY1 = barY0 + 6
-                graphics.fill(barX0, barY0, barX1, barY1, BAR_BACKGROUND)
-                val fillX1 = barX0 + ((barX1 - barX0) * healthRatio).toInt()
-                graphics.fill(barX0, barY0, fillX1, barY1, healthColor(healthRatio))
-
-                val healthText = Component.literal("${ceil(target.health).toInt()} / ${ceil(target.maxHealth).toInt()}")
-                    .apply { if (bold) withStyle(ChatFormatting.BOLD) }
-                graphics.text(font, healthText, textX, barY1 + 3, TEXT_COLOR, false)
+                val barX1 = panelX + PANEL_WIDTH - PADDING - 4
+                val barY0 = panelY + 22
+                val barY1 = barY0 + 13
+                drawHealthBar(graphics, font, barX0, barY0, barX1, barY1, healthRatio, target.health, target.maxHealth, bold)
             },
         )
         BetterHealthIndicatorLogger.info("Health panel HUD registered.")
@@ -276,16 +286,74 @@ object HealthPanelHud {
     private fun lerpChannel(from: Int, to: Int, t: Float): Int =
         (from + (to - from) * t).toInt().coerceIn(0, 255)
 
-    private fun healthColor(ratio: Float): Int {
-        val red: Int
-        val green: Int
-        if (ratio >= 0.5f) {
-            red = ((1.0f - ratio) * 2.0f * 255.0f).toInt()
-            green = 255
-        } else {
-            red = 255
-            green = (ratio * 2.0f * 255.0f).toInt()
+    /** 面板背景：半透明深色底（竖向渐变）+ 最外深色描边 + 内一圈外凸 bevel，营造原版风格立体质感。 */
+    private fun drawPanelBackground(graphics: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int) {
+        graphics.fillGradient(x0, y0, x1, y1, PANEL_BG_TOP, PANEL_BG_BOTTOM)
+        // 注意：outline 参数是 (x, y, 宽, 高)，与 fill 的 (左, 上, 右, 下) 语义不同。
+        graphics.outline(x0, y0, x1 - x0, y1 - y0, PANEL_BORDER)
+        // 内一圈：顶/左高光、底/右阴影 → 外凸立体感。
+        graphics.fill(x0 + 1, y0 + 1, x1 - 1, y0 + 2, BEVEL_HIGHLIGHT)
+        graphics.fill(x0 + 1, y0 + 1, x0 + 2, y1 - 1, BEVEL_HIGHLIGHT)
+        graphics.fill(x0 + 1, y1 - 2, x1 - 1, y1 - 1, BEVEL_SHADOW)
+        graphics.fill(x1 - 2, y0 + 1, x1 - 1, y1 - 1, BEVEL_SHADOW)
+    }
+
+    /**
+     * 血条：凹槽底 + 描边 + 按血量三档着色的前景 + 顶部高光，并把「当前 / 上限」数值居中叠加其上（无阴影）。
+     */
+    private fun drawHealthBar(
+        graphics: GuiGraphicsExtractor,
+        font: net.minecraft.client.gui.Font,
+        x0: Int,
+        y0: Int,
+        x1: Int,
+        y1: Int,
+        ratio: Float,
+        health: Float,
+        maxHealth: Float,
+        bold: Boolean,
+    ) {
+        graphics.fill(x0, y0, x1, y1, BAR_TRACK)
+        // outline 用 (x, y, 宽, 高)：在血条外扩 1px 描边。
+        graphics.outline(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, BAR_BORDER)
+        // 前景填充按血量三档用荧光亮色当亮底；数字统一纯白，避免与填充色冲突。
+        val fillColor = when {
+            ratio > 0.5f -> FILL_HEALTHY
+            ratio >= 0.2f -> FILL_WARNING
+            else -> FILL_DANGER
         }
-        return (0xFF shl 24) or (red.coerceIn(0, 255) shl 16) or (green.coerceIn(0, 255) shl 8) or 48
+        val fillX1 = x0 + ((x1 - x0) * ratio).toInt()
+        if (fillX1 > x0) {
+            graphics.fill(x0, y0, fillX1, y1, fillColor)
+            // 前景上半部以棋盘格（间隔 1px）打半透明白高光，营造 MC 像素颗粒质感。
+            drawGlossCheckerboard(graphics, x0, y0, fillX1, y1)
+        }
+        // 数值：当前/最大血量浅灰，分隔符用更暗的中灰以作区分；无阴影；整体粗细跟随面板「文本加粗」设置。
+        val text = Component.empty()
+            .append(Component.literal(ceil(health).toInt().toString()).withColor(HEALTH_NUM_TEXT))
+            .append(Component.literal(" / ").withColor(HEALTH_NUM_SEP))
+            .append(Component.literal(ceil(maxHealth).toInt().toString()).withColor(HEALTH_NUM_TEXT))
+            .apply { if (bold) withStyle(ChatFormatting.BOLD) }
+        val cx = (x0 + x1) / 2
+        val cy = y0 + (y1 - y0 - font.lineHeight) / 2 + 1
+        graphics.text(font, text, cx - font.width(text) / 2, cy, TEXT_COLOR, true)
+    }
+
+    /**
+     * 在矩形区域内以「棋盘格」方式（间隔 1px）打半透明白高光点，营造 Minecraft 像素颗粒质感。
+     * 仅在 (x-x0)+(y-y0) 为偶数的格子着色，奇偶交错形成棋盘。
+     */
+    private fun drawGlossCheckerboard(graphics: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int) {
+        var py = y0
+        while (py < y1) {
+            var px = x0
+            while (px < x1) {
+                if (((px - x0) + (py - y0)) and 1 == 0) {
+                    graphics.fill(px, py, px + 1, py + 1, BAR_GLOSS)
+                }
+                px++
+            }
+            py++
+        }
     }
 }
