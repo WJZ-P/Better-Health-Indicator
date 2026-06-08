@@ -4,13 +4,13 @@ import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.PanelCorner
 import com.wjz.betterhealthindicator.config.PanelFrameShape
+import com.wjz.betterhealthindicator.client.render.AttackTracker
 import com.wjz.betterhealthindicator.client.render.EntityModelExtents
 import com.wjz.betterhealthindicator.client.render.EntitySelector
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
-import net.fabricmc.fabric.api.event.player.AttackEntityCallback
+import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
-import net.minecraft.world.InteractionResult
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
@@ -73,18 +73,7 @@ object HealthPanelHud {
     // √2：MC 碰撞箱水平足迹为“宽×宽”正方形，绕行到 45° 视角时横向投影最大可达 宽×√2，取此最坏值保证不被裁切。
     private const val FOOTPRINT_DIAGONAL = 1.41421356f
 
-    // 最近被本地玩家攻击的生物与攻击时刻（毫秒墙钟）；用于准星无目标时的兜底显示。
-    private var lastAttacked: LivingEntity? = null
-    private var lastAttackAtMs: Long = 0L
-
     fun register() {
-        AttackEntityCallback.EVENT.register { player, _, _, entity, _ ->
-            if (player === Minecraft.getInstance().player && entity is LivingEntity) {
-                lastAttacked = entity
-                lastAttackAtMs = System.currentTimeMillis()
-            }
-            InteractionResult.PASS
-        }
         HudElementRegistry.addLast(
             Identifier.fromNamespaceAndPath("better_health_indicator", "health_panel"),
             HudElement { graphics, delta ->
@@ -123,7 +112,10 @@ object HealthPanelHud {
 
                 val font = minecraft.font
                 val textX = frameX1 + 6
-                graphics.text(font, target.displayName, textX, panelY + 6, TEXT_COLOR, false)
+                val bold = config.panelTextBold
+                val nameText =
+                    if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName
+                graphics.text(font, nameText, textX, panelY + 6, TEXT_COLOR, false)
 
                 val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
                 val barX0 = textX
@@ -135,6 +127,7 @@ object HealthPanelHud {
                 graphics.fill(barX0, barY0, fillX1, barY1, healthColor(healthRatio))
 
                 val healthText = Component.literal("${ceil(target.health).toInt()} / ${ceil(target.maxHealth).toInt()}")
+                    .apply { if (bold) withStyle(ChatFormatting.BOLD) }
                 graphics.text(font, healthText, textX, barY1 + 3, TEXT_COLOR, false)
             },
         )
@@ -142,19 +135,11 @@ object HealthPanelHud {
     }
 
     /**
-     * 兜底目标：在有效期内且仍满足通用渲染条件的“最近受击生物”，否则清空并返回 null。
+     * 兜底目标：在有效期内（[AttackTracker]）且仍满足通用渲染条件的“最近受击生物”，否则返回 null。
      * 作为最低优先级，仅当准星没有命中可显示目标时使用。
      */
     private fun pickAttackedFallback(frame: EntitySelector.Frame): LivingEntity? {
-        val config = frame.config
-        if (!config.panelTrackAttacked) return null
-        val attacked = lastAttacked ?: return null
-
-        val elapsed = System.currentTimeMillis() - lastAttackAtMs
-        if (elapsed > (config.panelAttackTrackingSeconds * 1000.0).toLong()) {
-            lastAttacked = null
-            return null
-        }
+        val attacked = AttackTracker.tracked(frame.config) ?: return null
         if (!EntitySelector.isPanelFallbackEligible(attacked, frame)) return null
         return attacked
     }
@@ -237,9 +222,6 @@ object HealthPanelHud {
             //  这里是方形的框框
             PanelFrameShape.SQUARE -> {
                 val size = x1 - x0
-                // 贴图含透明区/白边，直接贴在半透明面板上会透出背景、看似“缺块”。
-                // 先铺一层不透明视口底（与圆形同款竖向渐变），透明区不再透背景，边角即呈锐利方形。
-                graphics.fillGradient(x0, y0, x1, y1, FRAME_BG_TOP, FRAME_BG_BOTTOM)
                 graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_SELECTION_SPRITE, x0, y0, size, y1 - y0)
                 // 模型框按贴图白边比例内缩，避免模型压到边框。
                 val inset = (size * HOTBAR_SELECTION_NATIVE_BORDER / HOTBAR_SELECTION_NATIVE_SIZE).toInt().coerceAtLeast(2)

@@ -43,6 +43,22 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.displayMode = it }
                 .build(),
         )
+        global.addEntry(
+            entry.startBooleanToggle(Component.literal("追踪最近受击目标"), config.trackAttacked)
+                .setDefaultValue(Defaults.TRACK_ATTACKED)
+                .setTooltip(Component.literal("攻击某生物后，在有效期内即便准星移开，头顶血条（LOOKING_AT 策略）与屏幕面板仍持续显示它"))
+                .setSaveConsumer { config.trackAttacked = it }
+                .build(),
+        )
+        global.addEntry(
+            entry.startDoubleField(Component.literal("受击追踪有效期（秒）"), config.attackTrackingSeconds)
+                .setMin(1.0)
+                .setMax(60.0)
+                .setDefaultValue(Defaults.ATTACK_TRACKING_SECONDS)
+                .setTooltip(Component.literal("受击目标持续显示的时长；攻击瞬间刷新计时，超时后不再追踪"))
+                .setSaveConsumer { config.attackTrackingSeconds = it }
+                .build(),
+        )
 
         val head = builder.getOrCreateCategory(Component.literal("头顶血条"))
         head.addEntry(
@@ -191,17 +207,10 @@ object ClothConfigScreenFactory {
                 .build(),
         )
         panel.addEntry(
-            entry.startBooleanToggle(Component.literal("追踪最近受击目标（兜底）"), config.panelTrackAttacked)
-                .setDefaultValue(Defaults.PANEL_TRACK_ATTACKED)
-                .setSaveConsumer { config.panelTrackAttacked = it }
-                .build(),
-        )
-        panel.addEntry(
-            entry.startDoubleField(Component.literal("受击追踪有效期（秒）"), config.panelAttackTrackingSeconds)
-                .setMin(1.0)
-                .setMax(60.0)
-                .setDefaultValue(Defaults.PANEL_ATTACK_TRACKING_SECONDS)
-                .setSaveConsumer { config.panelAttackTrackingSeconds = it }
+            entry.startBooleanToggle(Component.literal("面板文本加粗"), config.panelTextBold)
+                .setDefaultValue(Defaults.PANEL_TEXT_BOLD)
+                .setTooltip(Component.literal("开启后，加粗面板内的字体"))
+                .setSaveConsumer { config.panelTextBold = it }
                 .build(),
         )
 

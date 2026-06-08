@@ -56,6 +56,10 @@ class HealthIndicatorConfig {
     var enabled: Boolean = Defaults.ENABLED
     var maxDistance: Double = Defaults.MAX_DISTANCE
     var displayMode: DisplayMode = Defaults.DISPLAY_MODE
+    // 受击追踪：攻击某生物后，在有效期内即便准星移开，头顶血条（LOOKING_AT 策略）与屏幕面板仍持续显示它。
+    var trackAttacked: Boolean = Defaults.TRACK_ATTACKED
+    // 受击目标的追踪有效期（秒）；攻击瞬间刷新计时，超时后不再追踪。
+    var attackTrackingSeconds: Double = Defaults.ATTACK_TRACKING_SECONDS
 
     // 头顶血条
     var headBarEnabled: Boolean = Defaults.HEAD_BAR_ENABLED
@@ -102,11 +106,9 @@ class HealthIndicatorConfig {
     var panelCorner: PanelCorner = Defaults.PANEL_CORNER
     var panelFrameShape: PanelFrameShape = Defaults.PANEL_FRAME_SHAPE
     var panelShowModel: Boolean = Defaults.PANEL_SHOW_MODEL
+    // 面板内名字与血量文本是否加粗（位图字体无连续字重，仅能通过 BOLD 样式加粗）。
+    var panelTextBold: Boolean = Defaults.PANEL_TEXT_BOLD
     var panelScale: Float = Defaults.PANEL_SCALE
-    // 受击兜底追踪：攻击某生物后，在有效期内即使没有其他可渲染目标，也以最低优先级兜底显示它。
-    var panelTrackAttacked: Boolean = Defaults.PANEL_TRACK_ATTACKED
-    // 受击目标的兜底有效期（秒）；攻击瞬间刷新计时，超时后不再兜底。
-    var panelAttackTrackingSeconds: Double = Defaults.PANEL_ATTACK_TRACKING_SECONDS
 
     val maxDistanceSquared: Double get() = maxDistance * maxDistance
 
@@ -118,6 +120,8 @@ class HealthIndicatorConfig {
         const val ENABLED: Boolean = true
         const val MAX_DISTANCE: Double = 48.0
         val DISPLAY_MODE: DisplayMode = DisplayMode.ALWAYS
+        const val TRACK_ATTACKED: Boolean = true
+        const val ATTACK_TRACKING_SECONDS: Double = 5.0
 
         const val HEAD_BAR_ENABLED: Boolean = true
         val BAR_STYLE: BarStyle = BarStyle.HEARTS
@@ -151,8 +155,7 @@ class HealthIndicatorConfig {
         val PANEL_CORNER: PanelCorner = PanelCorner.TOP_LEFT
         val PANEL_FRAME_SHAPE: PanelFrameShape = PanelFrameShape.SQUARE
         const val PANEL_SHOW_MODEL: Boolean = true
+        const val PANEL_TEXT_BOLD: Boolean = false
         const val PANEL_SCALE: Float = 1.0f
-        const val PANEL_TRACK_ATTACKED: Boolean = true
-        const val PANEL_ATTACK_TRACKING_SECONDS: Double = 5.0
     }
 }
