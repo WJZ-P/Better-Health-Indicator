@@ -26,6 +26,11 @@ repositories {
         name = 'TerraformersMC'
         url = 'https://maven.terraformersmc.com/releases/'
     }
+    //  光影
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+    }
     mavenCentral()
 }
 
@@ -40,6 +45,8 @@ dependencies {
         exclude(group: 'net.fabricmc.fabric-api')
     }
     implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
+    modRuntimeOnly "maven.modrinth:sodium:mc26.1.1-0.8.9-fabric"
+    modRuntimeOnly "maven.modrinth:iris:1.10.9+26.1-fabric"
 }
 
 tasks.named('processResources', ProcessResources).configure {
