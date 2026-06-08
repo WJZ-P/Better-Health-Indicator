@@ -59,6 +59,13 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.attackTrackingSeconds = it }
                 .build(),
         )
+        global.addEntry(
+            entry.startBooleanToggle(Component.literal("隐藏原版伤害粒子"), config.hideVanillaDamageParticles)
+                .setDefaultValue(Defaults.HIDE_VANILLA_DAMAGE_PARTICLES)
+                .setTooltip(Component.literal("隐藏原版攻击命中时迸出的心形粒子，避免和mod自带的在视觉上冲突"))
+                .setSaveConsumer { config.hideVanillaDamageParticles = it }
+                .build(),
+        )
 
         val head = builder.getOrCreateCategory(Component.literal("头顶血条"))
         head.addEntry(

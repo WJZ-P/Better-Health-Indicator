@@ -60,6 +60,8 @@ class HealthIndicatorConfig {
     var trackAttacked: Boolean = Defaults.TRACK_ATTACKED
     // 受击目标的追踪有效期（秒）；攻击瞬间刷新计时，超时后不再追踪。
     var attackTrackingSeconds: Double = Defaults.ATTACK_TRACKING_SECONDS
+    // 隐藏原版攻击命中时的伤害指示粒子（红色破碎心形 DAMAGE_INDICATOR），避免与本模组自绘的掉血爱心粒子重叠冲突；默认隐藏。
+    var hideVanillaDamageParticles: Boolean = Defaults.HIDE_VANILLA_DAMAGE_PARTICLES
 
     // 头顶血条
     var headBarEnabled: Boolean = Defaults.HEAD_BAR_ENABLED
@@ -122,6 +124,7 @@ class HealthIndicatorConfig {
         val DISPLAY_MODE: DisplayMode = DisplayMode.ALWAYS
         const val TRACK_ATTACKED: Boolean = true
         const val ATTACK_TRACKING_SECONDS: Double = 5.0
+        const val HIDE_VANILLA_DAMAGE_PARTICLES: Boolean = true
 
         const val HEAD_BAR_ENABLED: Boolean = true
         val BAR_STYLE: BarStyle = BarStyle.HEARTS
