@@ -7,6 +7,10 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    // 在此声明 Loom 版本（从 gradle.properties 读取），使 build.gradle.kts 的 plugins 块无需再写版本号。
+    plugins {
+        id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    }
 }
 
 plugins {
