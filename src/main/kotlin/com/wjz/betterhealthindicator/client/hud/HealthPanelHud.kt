@@ -49,13 +49,21 @@ object HealthPanelHud {
     private const val FRAME_BORDER_COLOR = 0xFF4A4A5C.toInt()
     private const val FRAME_BORDER_THICKNESS = 1
 
-    // 正方形边框直接复用原版「未选中快捷栏格」贴图（26×26，拉伸缩放）。
-    private val SLOT_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
-    private const val SLOT_NATIVE_SIZE = 26.0f
-    private const val SLOT_NATIVE_BORDER = 2.0f // 贴图斜角边框占用的像素，用于按比例内缩模型框
-    private const val BAR_BACKGROUND = 0xC0202020.toInt()
+    // 原版hud资产: gamemode_switcher/slot 这个是F3+F4 面板里面的未选中态,四角带缺口,gamemode_switcher/selection是选中态，金色的
+    // hud/hotbar_selection是快捷栏选中态
+
+    // private val SLOT_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
+    // private val SELECTION_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/selection")
+    // private const val SLOT_NATIVE_SIZE = 26.0f
+    // private const val SLOT_NATIVE_BORDER = 2.0f // 贴图斜角边框占用的像素，用于按比例内缩模型框
+
+    // 左上角面板HUD用F3+F4的面板的未选中态来做
+    private val HOTBAR_SELECTION_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
+    private const val HOTBAR_SELECTION_NATIVE_SIZE = 22.0f
+    private const val HOTBAR_SELECTION_NATIVE_BORDER = 2.0f // 选中框白边占用像素，用于按比例内缩模型框
+    private const val BAR_BACKGROUND = 0xC0202020.toInt()   // 整个面板背景色
     private const val TEXT_COLOR = 0xFFFFFFFF.toInt()
-    private const val MODEL_PITCH = -15.0f
+    private const val MODEL_PITCH = -15.0f  //  3D模型的俯视角
     private const val SQRT2 = 1.41421356f
 
     // 模型在渲染框中占用的比例（留少量边距，避免模型网格略超碰撞箱时贴边）。
@@ -226,11 +234,15 @@ object HealthPanelHud {
     ): IntArray {
         val t = FRAME_BORDER_THICKNESS
         return when (shape) {
+            //  这里是方形的框框
             PanelFrameShape.SQUARE -> {
                 val size = x1 - x0
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, SLOT_SPRITE, x0, y0, size, y1 - y0)
-                // 模型框按贴图边框比例内缩，避免模型压到斜角边框。
-                val inset = (size * SLOT_NATIVE_BORDER / SLOT_NATIVE_SIZE).toInt().coerceAtLeast(2)
+                // 贴图含透明区/白边，直接贴在半透明面板上会透出背景、看似“缺块”。
+                // 先铺一层不透明视口底（与圆形同款竖向渐变），透明区不再透背景，边角即呈锐利方形。
+                graphics.fillGradient(x0, y0, x1, y1, FRAME_BG_TOP, FRAME_BG_BOTTOM)
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_SELECTION_SPRITE, x0, y0, size, y1 - y0)
+                // 模型框按贴图白边比例内缩，避免模型压到边框。
+                val inset = (size * HOTBAR_SELECTION_NATIVE_BORDER / HOTBAR_SELECTION_NATIVE_SIZE).toInt().coerceAtLeast(2)
                 intArrayOf(x0 + inset, y0 + inset, x1 - inset, y1 - inset)
             }
 
