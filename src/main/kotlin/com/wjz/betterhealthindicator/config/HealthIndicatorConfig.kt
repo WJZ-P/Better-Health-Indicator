@@ -39,6 +39,15 @@ enum class PanelFrameShape {
     CIRCLE,
 }
 
+/** 屏幕面板配色主题。 */
+enum class PanelTheme {
+    /** 浅色：原版米白风（默认）。 */
+    LIGHT,
+
+    /** 深色：半透明深色玻璃风。 */
+    DARK,
+}
+
 /** 血量到爱心数量的换算方式。 */
 enum class HealthMode {
     /** 绝对血量：严格 1 颗心 = 2HP，心数随血量增长；高血量启用分层异色（默认）。 */
@@ -107,6 +116,7 @@ class HealthIndicatorConfig {
     var panelEnabled: Boolean = Defaults.PANEL_ENABLED
     var panelCorner: PanelCorner = Defaults.PANEL_CORNER
     var panelFrameShape: PanelFrameShape = Defaults.PANEL_FRAME_SHAPE
+    var panelTheme: PanelTheme = Defaults.PANEL_THEME
     var panelShowModel: Boolean = Defaults.PANEL_SHOW_MODEL
     // 面板内名字与血量文本是否加粗（位图字体无连续字重，仅能通过 BOLD 样式加粗）。
     var panelTextBold: Boolean = Defaults.PANEL_TEXT_BOLD
@@ -157,6 +167,7 @@ class HealthIndicatorConfig {
         const val PANEL_ENABLED: Boolean = true
         val PANEL_CORNER: PanelCorner = PanelCorner.TOP_LEFT
         val PANEL_FRAME_SHAPE: PanelFrameShape = PanelFrameShape.SQUARE
+        val PANEL_THEME: PanelTheme = PanelTheme.LIGHT
         const val PANEL_SHOW_MODEL: Boolean = true
         const val PANEL_TEXT_BOLD: Boolean = false
         const val PANEL_SCALE: Float = 1.0f

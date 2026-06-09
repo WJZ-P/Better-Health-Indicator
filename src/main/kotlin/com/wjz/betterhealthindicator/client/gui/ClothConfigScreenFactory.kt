@@ -6,6 +6,7 @@ import com.wjz.betterhealthindicator.config.DisplayMode
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig.Defaults
 import com.wjz.betterhealthindicator.config.PanelCorner
 import com.wjz.betterhealthindicator.config.PanelFrameShape
+import com.wjz.betterhealthindicator.config.PanelTheme
 import me.shedaniel.clothconfig2.api.ConfigBuilder
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
@@ -205,6 +206,13 @@ object ClothConfigScreenFactory {
                 .setDefaultValue(Defaults.PANEL_FRAME_SHAPE)
                 .setTooltip(Component.literal("面板内 3D 模型视口的边框：正方形或圆形"))
                 .setSaveConsumer { config.panelFrameShape = it }
+                .build(),
+        )
+        panel.addEntry(
+            entry.startEnumSelector(Component.literal("面板主题"), PanelTheme::class.java, config.panelTheme)
+                .setDefaultValue(Defaults.PANEL_THEME)
+                .setTooltip(Component.literal("浅色：原版米白风；深色：半透明深色玻璃风"))
+                .setSaveConsumer { config.panelTheme = it }
                 .build(),
         )
         panel.addEntry(
