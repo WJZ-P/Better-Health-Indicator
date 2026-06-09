@@ -34,10 +34,13 @@ import kotlin.math.sqrt
  * 实体模型复用原版 [InventoryScreen.extractEntityInInventoryFollowsMouse]。
  */
 object HealthPanelHud {
-    private const val PANEL_WIDTH = 120
+    private const val PANEL_WIDTH_DEFAULT = 120 // 面板默认/最小宽度
+    private const val PANEL_WIDTH_MAX = 220      // 名字过长时最多扩展到的宽度，超出则省略
+    private const val CONTENT_RIGHT_PAD = 6      // 文本/血条距面板右沿的内边距
     private const val PANEL_HEIGHT = 44
     private const val MARGIN = 2
     private const val PADDING = 2
+    private const val BAR_HEIGHT = 12 // 血条高度（像素），调小更显精致协调
 
     // 圆形视口边框粗细（像素）；各处配色统一见 [Theme]（深/浅两套主题）。
     private const val FRAME_BORDER_THICKNESS = 1
@@ -61,6 +64,12 @@ object HealthPanelHud {
     private const val FILL_WARNING = 0xFFCC8C33.toInt() // 20%~50% 明亮金黄
     private const val FILL_DANGER = 0xFFCC3333.toInt()  // <20% 刺目鲜红
 
+    // 血条数字配色（深浅主题共用）：白字 + 灰分隔符，统一带阴影，压在荧光填充上都清晰。
+    private const val NAME_COLOR = 0xFFFFFFFF.toInt()
+    private const val HEALTH_NUM_TEXT = 0xFFFFFFFF.toInt()
+    private const val HEALTH_NUM_SEP = 0xFFAAAAAA.toInt()
+    private const val HEALTH_NUM_SCALE = 0.8f // 血条数字缩放（<1 即比原版字体小一号）
+
     /**
      * 面板配色主题。深/浅两套，全部颜色集中在此一处切换：
      * - 深色：半透明深色玻璃底，浅字 + 黑阴影；
@@ -80,16 +89,12 @@ object HealthPanelHud {
         val barInsetShadow: Int,
         val barInsetHighlight: Int,
         val barGloss: Int,
-        val nameColor: Int,
-        val numText: Int,
-        val numSep: Int,
-        val textShadow: Boolean,
     )
 
     // 深色：半透明深色玻璃（外凸 bevel：顶/左白高光、底/右黑阴影），浅字 + 黑阴影。
     private val DARK_THEME = Theme(
-        bgTop = 0xC01E1E26.toInt(),
-        bgBottom = 0xC0101016.toInt(),
+        bgTop = (PANEL_ALPHA shl 24) or 0x1E1E26,
+        bgBottom = (PANEL_ALPHA shl 24) or 0x101016,
         border = 0xD0000000.toInt(),
         bevelHighlight = 0x40FFFFFF.toInt(),
         bevelShadow = 0x55000000.toInt(),
@@ -101,16 +106,15 @@ object HealthPanelHud {
         barInsetShadow = 0x60000000.toInt(),
         barInsetHighlight = 0x50FFFFFF.toInt(),
         barGloss = 0x10FFFFFF.toInt(),
-        nameColor = 0xFFFFFFFF.toInt(),
-        numText = 0xFFFFFFFF.toInt(),
-        numSep = 0xFFAAAAAA.toInt(),
-        textShadow = true,
     )
 
-    // 浅色：贴合左侧原版 slot 方形框的中性灰立体风（面板用原版容器灰 #C6C6C6 系，圆形视口模仿 slot 的浅边 + 深内底），深灰字、无阴影。
+    // 面板背景透明度（0x00 全透 ~ 0xFF 不透）：深浅两套主题共用，调低可让游戏背景透出，方便按喜好随手微调。
+    private const val PANEL_ALPHA = 0xA8
+
+    // 浅色：贴合左侧原版 slot 方形框的中性灰立体风（面板用原版容器灰系，圆形视口模仿 slot 的浅边 + 深内底）。
     private val LIGHT_THEME = Theme(
-        bgTop = 0xF0C6C6C6.toInt(),
-        bgBottom = 0xF0A8A8A8.toInt(),
+        bgTop = (PANEL_ALPHA shl 24) or 0xB2B2B2,
+        bgBottom = (PANEL_ALPHA shl 24) or 0x969696,
         border = 0xFF373737.toInt(),
         bevelHighlight = 0xC0FFFFFF.toInt(),
         bevelShadow = 0x60303030.toInt(),
@@ -122,10 +126,6 @@ object HealthPanelHud {
         barInsetShadow = 0x60000000.toInt(),
         barInsetHighlight = 0x60FFFFFF.toInt(),
         barGloss = 0x10FFFFFF.toInt(),
-        nameColor = 0xFF2A2A2A.toInt(),
-        numText = 0xFF2A2A2A.toInt(),
-        numSep = 0xFF555555.toInt(),
-        textShadow = false,
     )
     private const val MODEL_PITCH = -15.0f  //  3D模型的俯视角
     private const val SQRT2 = 1.41421356f
@@ -152,19 +152,31 @@ object HealthPanelHud {
                 // 优先准星目标；都没有时，最低优先级兜底显示有效期内的“最近受击生物”。
                 val target = EntitySelector.pickPanelTarget(frame) ?: pickAttackedFallback(frame) ?: return@HudElement
 
+                val font = minecraft.font
+                val bold = config.panelTextBold
+                val frameSize = PANEL_HEIGHT - PADDING * 2
+                // 文本区左沿相对面板左沿的偏移：内边距 + 模型框 + 间隙。
+                val contentLeft = PADDING + frameSize + 6
+                // 面板宽度随名字完整宽度在「默认~最大」间自适应；超出最大宽度的名字会被省略。
+                val fullNameWidth =
+                    font.width(if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName)
+                val panelWidth = (contentLeft + fullNameWidth + CONTENT_RIGHT_PAD)
+                    .coerceIn(PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX)
+                val maxNameWidth = panelWidth - contentLeft - CONTENT_RIGHT_PAD
+                val nameText = fitName(font, target.displayName, bold, maxNameWidth)
+
                 val panelX = when (config.panelCorner) {
                     PanelCorner.TOP_LEFT -> MARGIN
-                    PanelCorner.TOP_RIGHT -> graphics.guiWidth() - PANEL_WIDTH - MARGIN
+                    PanelCorner.TOP_RIGHT -> graphics.guiWidth() - panelWidth - MARGIN
                 }
                 val panelY = MARGIN
 
                 val theme = if (config.panelTheme == PanelTheme.LIGHT) LIGHT_THEME else DARK_THEME
-                drawPanelBackground(graphics, theme, panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT)
+                drawPanelBackground(graphics, theme, panelX, panelY, panelX + panelWidth, panelY + PANEL_HEIGHT)
 
                 // 模型视口：左侧正方形区域，按形状绘制边框，并返回模型可绘制的内框。
                 val frameX0 = panelX + PADDING
                 val frameY0 = panelY + PADDING
-                val frameSize = PANEL_HEIGHT - PADDING * 2
                 val frameX1 = frameX0 + frameSize
                 val frameY1 = frameY0 + frameSize
 
@@ -173,19 +185,15 @@ object HealthPanelHud {
                     renderEntityModel(graphics, target, inner[0], inner[1], inner[2], inner[3])
                 }
 
-                val font = minecraft.font
                 val textX = frameX1 + 6
-                val bold = config.panelTextBold
-                val nameText =
-                    if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName
-                graphics.text(font, nameText, textX, panelY + 6, theme.nameColor, theme.textShadow)
+                graphics.text(font, nameText, textX, panelY + 6, NAME_COLOR, true)
 
                 // 血条：凹槽 + 描边 + 随血量红→黄→绿渐变前景 + 顶部高光，血量数值居中叠加其上。
                 val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
                 val barX0 = textX
-                val barX1 = panelX + PANEL_WIDTH - PADDING - 4
+                val barX1 = panelX + panelWidth - PADDING - 4
                 val barY0 = panelY + 22
-                val barY1 = barY0 + 13
+                val barY1 = barY0 + BAR_HEIGHT
                 drawHealthBar(graphics, theme, font, barX0, barY0, barX1, barY1, healthRatio, target.health, target.maxHealth, bold)
             },
         )
@@ -200,6 +208,31 @@ object HealthPanelHud {
         val attacked = AttackTracker.tracked(frame.config) ?: return null
         if (!EntitySelector.isPanelFallbackEligible(attacked, frame)) return null
         return attacked
+    }
+
+    /**
+     * 名字按 [maxWidth] 自适应：放得下则原样（按需加粗），否则尾部用 "..." 省略到刚好放下。
+     * 截断会丢弃原名字的富文本样式，仅保留纯文本（统一以 [NAME_COLOR] 白字渲染），命名牌场景足够。
+     */
+    private fun fitName(
+        font: net.minecraft.client.gui.Font,
+        base: Component,
+        bold: Boolean,
+        maxWidth: Int,
+    ): Component {
+        fun styled(s: String): Component =
+            Component.literal(s).apply { if (bold) withStyle(ChatFormatting.BOLD) }
+        val full = if (bold) base.copy().withStyle(ChatFormatting.BOLD) else base
+        if (maxWidth <= 0 || font.width(full) <= maxWidth) return full
+        val raw = base.string
+        val ellipsis = "..."
+        var len = raw.length - 1
+        while (len > 0) {
+            val candidate = styled(raw.substring(0, len) + ellipsis)
+            if (font.width(candidate) <= maxWidth) return candidate
+            len--
+        }
+        return styled(ellipsis)
     }
 
     private fun renderEntityModel(
@@ -382,13 +415,21 @@ object HealthPanelHud {
         drawInsetBevel(graphics, theme, x0, y0, x1, y1)
         // 数值：当前/最大血量随主题取色（深色浅字/浅色深字），分隔符用区分灰；阴影随主题；粗细跟随面板「文本加粗」设置。
         val text = Component.empty()
-            .append(Component.literal(ceil(health).toInt().toString()).withColor(theme.numText))
-            .append(Component.literal(" / ").withColor(theme.numSep))
-            .append(Component.literal(ceil(maxHealth).toInt().toString()).withColor(theme.numText))
+            .append(Component.literal(ceil(health).toInt().toString()).withColor(HEALTH_NUM_TEXT))
+            .append(Component.literal(" / ").withColor(HEALTH_NUM_SEP))
+            .append(Component.literal(ceil(maxHealth).toInt().toString()).withColor(HEALTH_NUM_TEXT))
             .apply { if (bold) withStyle(ChatFormatting.BOLD) }
-        val cx = (x0 + x1) / 2
-        val cy = y0 + (y1 - y0 - font.lineHeight) / 2 + 1
-        graphics.text(font, text, cx - font.width(text) / 2, cy, theme.numText, theme.textShadow)
+        // 数字缩小一号：用 2D 矩阵以血条中心为锚点缩放后绘制（MC 字体无原生小字号）。
+        val s = HEALTH_NUM_SCALE
+        val tw = font.width(text)
+        val centerX = (x0 + x1) / 2f
+        val centerY = (y0 + y1) / 2f
+        val pose = graphics.pose()
+        pose.pushMatrix()
+        pose.translate(centerX - tw * s / 2f, centerY - font.lineHeight * s / 2f)
+        pose.scale(s, s)
+        graphics.text(font, text, 0, 0, HEALTH_NUM_TEXT, true)
+        pose.popMatrix()
     }
 
     /**
