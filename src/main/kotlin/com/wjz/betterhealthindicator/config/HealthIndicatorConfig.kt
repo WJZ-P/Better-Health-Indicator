@@ -39,6 +39,15 @@ enum class PanelFrameShape {
     CIRCLE,
 }
 
+/** 屏幕面板血条显示样式。 */
+enum class PanelBarStyle {
+    /** 纯色矩形血条（默认）。 */
+    BAR,
+
+    /** 原版爱心图标。 */
+    HEARTS,
+}
+
 /** 屏幕面板配色主题。 */
 enum class PanelTheme {
     /** 浅色：原版米白风（默认）。 */
@@ -117,6 +126,9 @@ class HealthIndicatorConfig {
     var panelCorner: PanelCorner = Defaults.PANEL_CORNER
     var panelFrameShape: PanelFrameShape = Defaults.PANEL_FRAME_SHAPE
     var panelTheme: PanelTheme = Defaults.PANEL_THEME
+    var panelBarStyle: PanelBarStyle = Defaults.PANEL_BAR_STYLE
+    // 心形样式下，目标扣血/回血时心容器外圈闪白高亮（还原原版受伤反馈）。
+    var panelHeartHighlight: Boolean = Defaults.PANEL_HEART_HIGHLIGHT
     var panelShowModel: Boolean = Defaults.PANEL_SHOW_MODEL
     // 面板内名字与血量文本是否加粗（位图字体无连续字重，仅能通过 BOLD 样式加粗）。
     var panelTextBold: Boolean = Defaults.PANEL_TEXT_BOLD
@@ -168,6 +180,8 @@ class HealthIndicatorConfig {
         val PANEL_CORNER: PanelCorner = PanelCorner.TOP_LEFT
         val PANEL_FRAME_SHAPE: PanelFrameShape = PanelFrameShape.SQUARE
         val PANEL_THEME: PanelTheme = PanelTheme.LIGHT
+        val PANEL_BAR_STYLE: PanelBarStyle = PanelBarStyle.BAR
+        const val PANEL_HEART_HIGHLIGHT: Boolean = true
         const val PANEL_SHOW_MODEL: Boolean = true
         const val PANEL_TEXT_BOLD: Boolean = false
         const val PANEL_SCALE: Float = 1.0f

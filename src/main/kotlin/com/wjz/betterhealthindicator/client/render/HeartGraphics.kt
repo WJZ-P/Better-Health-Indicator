@@ -20,7 +20,15 @@ object HeartGraphics {
     val HALF: Identifier = heartSprite("half")
     val CONTAINER: Identifier = heartSprite("container")
 
+    // 受击/回血高亮：心容器外圈闪白（原版同款），头顶 3D 血条用。
+    val CONTAINER_BLINKING: Identifier = heartSprite("container_blinking")
+
     const val SIZE: Float = 9.0f
+
+    // —— GUI（2D HUD）用心形精灵 id：走 GUI 图集（无 textures/gui/sprites 前缀、无 .png），供屏幕面板心形血条复用。 ——
+    // container_blinking 即原版受击/回血时的白色外圈高亮。
+    val GUI_CONTAINER: Identifier = Identifier.withDefaultNamespace("hud/heart/container")
+    val GUI_CONTAINER_BLINKING: Identifier = Identifier.withDefaultNamespace("hud/heart/container_blinking")
 
     /**
      * 分层爱心颜色，全部取自原版自带的异色心形精灵（无需染色/额外资源）。
@@ -36,6 +44,10 @@ object HeartGraphics {
 
         val full: Identifier = heartSprite(fullName)
         val half: Identifier = heartSprite(halfName)
+
+        // GUI 图集版（供 2D 面板心形血条用）。
+        val guiFull: Identifier = Identifier.withDefaultNamespace("hud/heart/$fullName")
+        val guiHalf: Identifier = Identifier.withDefaultNamespace("hud/heart/$halfName")
 
         companion object {
             /** 按叠层索引取颜色，超出调色板则循环。 */

@@ -3,11 +3,15 @@ package com.wjz.betterhealthindicator.client.hud
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.PanelCorner
+import com.wjz.betterhealthindicator.config.PanelBarStyle
 import com.wjz.betterhealthindicator.config.PanelFrameShape
 import com.wjz.betterhealthindicator.config.PanelTheme
 import com.wjz.betterhealthindicator.client.render.AttackTracker
 import com.wjz.betterhealthindicator.client.render.EntityModelExtents
 import com.wjz.betterhealthindicator.client.render.EntitySelector
+import com.wjz.betterhealthindicator.client.render.HeartBlinkTracker
+import com.wjz.betterhealthindicator.client.render.HeartGraphics
+import com.wjz.betterhealthindicator.client.render.HeartLayout
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
@@ -24,6 +28,7 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -41,6 +46,10 @@ object HealthPanelHud {
     private const val MARGIN = 2
     private const val PADDING = 2
     private const val BAR_HEIGHT = 12 // 血条高度（像素），调小更显精致协调
+
+    // —— 心形血条（复用 HeartLayout 布局；走 GUI 图集 sprite） ——
+    private const val HEART_SIZE = 9 // 单颗心贴图边长（像素，原版尺寸）
+    private const val HEART_STEP = 8 // 相邻心横向步距（略叠，原版一致）
 
     // 圆形视口边框粗细（像素）；各处配色统一见 [Theme]（深/浅两套主题）。
     private const val FRAME_BORDER_THICKNESS = 1
@@ -160,8 +169,17 @@ object HealthPanelHud {
                 // 面板宽度随名字完整宽度在「默认~最大」间自适应；超出最大宽度的名字会被省略。
                 val fullNameWidth =
                     font.width(if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName)
-                val panelWidth = (contentLeft + fullNameWidth + CONTENT_RIGHT_PAD)
-                    .coerceIn(PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX)
+                // 心形样式：预先算好布局，使面板宽度能容纳整排爱心。
+                val heartsView = if (config.panelBarStyle == PanelBarStyle.HEARTS)
+                    HeartLayout.compute(target.health, target.maxHealth, config) else null
+                val nameNeed = contentLeft + fullNameWidth + CONTENT_RIGHT_PAD
+                val panelWidth = if (heartsView != null) {
+                    // 心形：宽度完全由内容（名字 / 整排爱心，含多层异色）决定，不设最小宽度，仅受最大宽度限制。
+                    max(nameNeed, contentLeft + heartsWidth(heartsView, font) + CONTENT_RIGHT_PAD)
+                        .coerceAtMost(PANEL_WIDTH_MAX)
+                } else {
+                    nameNeed.coerceIn(PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX)
+                }
                 val maxNameWidth = panelWidth - contentLeft - CONTENT_RIGHT_PAD
                 val nameText = fitName(font, target.displayName, bold, maxNameWidth)
 
@@ -188,13 +206,19 @@ object HealthPanelHud {
                 val textX = frameX1 + 6
                 graphics.text(font, nameText, textX, panelY + 6, NAME_COLOR, true)
 
-                // 血条：凹槽 + 描边 + 随血量红→黄→绿渐变前景 + 顶部高光，血量数值居中叠加其上。
-                val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
                 val barX0 = textX
                 val barX1 = panelX + panelWidth - PADDING - 4
                 val barY0 = panelY + 22
                 val barY1 = barY0 + BAR_HEIGHT
-                drawHealthBar(graphics, theme, font, barX0, barY0, barX1, barY1, healthRatio, target.health, target.maxHealth, bold)
+                if (heartsView != null) {
+                    // 心形血条：血量变化时心容器外圈闪白（受击/回血反馈，可配置关闭）。
+                    val blinking = config.panelHeartHighlight && HeartBlinkTracker.update(target.id, target.health)
+                    drawHearts(graphics, font, barX0, (barY0 + barY1) / 2, heartsView, blinking, !config.drainFromRight)
+                } else {
+                    // 纯色血条：凹槽 + 描边 + 随血量红→黄→绿渐变前景 + 顶部高光，血量数值居中叠加其上。
+                    val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
+                    drawHealthBar(graphics, theme, font, barX0, barY0, barX1, barY1, healthRatio, target.health, target.maxHealth, bold)
+                }
             },
         )
         BetterHealthIndicatorLogger.info("Health panel HUD registered.")
@@ -234,6 +258,62 @@ object HealthPanelHud {
         }
         return styled(ellipsis)
     }
+
+    /** 心形血条所需像素宽度（整排爱心 + 可能的 xN 倍数标注），用于面板宽度自适应。 */
+    private fun heartsWidth(view: HeartLayout.View, font: net.minecraft.client.gui.Font): Int {
+        var w = view.slots.size * HEART_STEP + (HEART_SIZE - HEART_STEP)
+        if (view.multiplier > 0) w += 2 + font.width("×${view.multiplier}")
+        return w
+    }
+
+    /**
+     * 心形血条：复用 [HeartLayout] 的槽位（含分层异色 / 半心 / 掉血方向），在 2D GUI 用原版心形 sprite 绘制。
+     * [blinking] 为 true 时心容器外圈用 container_blinking（白圈），还原原版受击/回血高亮。
+     */
+    private fun drawHearts(
+        graphics: GuiGraphicsExtractor,
+        font: net.minecraft.client.gui.Font,
+        x0: Int,
+        centerY: Int,
+        view: HeartLayout.View,
+        blinking: Boolean,
+        mirrorHalf: Boolean,
+    ) {
+        val top = centerY - HEART_SIZE / 2
+        val container = if (blinking) HeartGraphics.GUI_CONTAINER_BLINKING else HeartGraphics.GUI_CONTAINER
+        // HeartLayout 的 cx 是给 3D billboard 用的（渲染带 scale(-x) 镜像，屏幕左对应大 cx）。
+        // 2D 面板无该镜像，故按 cx 降序还原同样的屏幕左→右视觉顺序（含掉血方向）。
+        val ordered = view.slots.sortedByDescending { it.cx }
+        ordered.forEachIndexed { i, slot ->
+            val x = x0 + i * HEART_STEP
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, container, x, top, HEART_SIZE, HEART_SIZE)
+            // 分层时空出的顶层揭示下一层满心作底，而非黑底。
+            slot.baseTier?.let {
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, it.guiFull, x, top, HEART_SIZE, HEART_SIZE)
+            }
+            when (slot.top) {
+                HeartLayout.Top.FULL ->
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiFull, x, top, HEART_SIZE, HEART_SIZE)
+                // 半心填充侧跟随掉血方向：从右往左扣→左半（原版默认 sprite）；从左往右扣→水平镜像成右半。
+                HeartLayout.Top.HALF -> if (mirrorHalf) {
+                    val pose = graphics.pose()
+                    pose.pushMatrix()
+                    pose.translate((2 * x + HEART_SIZE).toFloat(), 0.0f)
+                    pose.scale(-1.0f, 1.0f)
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalf, x, top, HEART_SIZE, HEART_SIZE)
+                    pose.popMatrix()
+                } else {
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalf, x, top, HEART_SIZE, HEART_SIZE)
+                }
+                HeartLayout.Top.NONE -> {}
+            }
+        }
+        if (view.multiplier > 0) {
+            val label = Component.literal("×${view.multiplier}")
+            graphics.text(font, label, x0 + ordered.size * HEART_STEP + 2, centerY - font.lineHeight / 2, NAME_COLOR, true)
+        }
+    }
+
 
     private fun renderEntityModel(
         graphics: GuiGraphicsExtractor,

@@ -4,6 +4,7 @@ import com.wjz.betterhealthindicator.config.BarStyle
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.DisplayMode
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig.Defaults
+import com.wjz.betterhealthindicator.config.PanelBarStyle
 import com.wjz.betterhealthindicator.config.PanelCorner
 import com.wjz.betterhealthindicator.config.PanelFrameShape
 import com.wjz.betterhealthindicator.config.PanelTheme
@@ -213,6 +214,20 @@ object ClothConfigScreenFactory {
                 .setDefaultValue(Defaults.PANEL_THEME)
                 .setTooltip(Component.literal("浅色：原版米白风；深色：半透明深色玻璃风"))
                 .setSaveConsumer { config.panelTheme = it }
+                .build(),
+        )
+        panel.addEntry(
+            entry.startEnumSelector(Component.literal("血条样式"), PanelBarStyle::class.java, config.panelBarStyle)
+                .setDefaultValue(Defaults.PANEL_BAR_STYLE)
+                .setTooltip(Component.literal("纯色矩形血条，或原版爱心图标"))
+                .setSaveConsumer { config.panelBarStyle = it }
+                .build(),
+        )
+        panel.addEntry(
+            entry.startBooleanToggle(Component.literal("心形受击高亮"), config.panelHeartHighlight)
+                .setDefaultValue(Defaults.PANEL_HEART_HIGHLIGHT)
+                .setTooltip(Component.literal("心形样式下，目标扣血/回血时心容器外圈闪白（还原原版受伤反馈）"))
+                .setSaveConsumer { config.panelHeartHighlight = it }
                 .build(),
         )
         panel.addEntry(

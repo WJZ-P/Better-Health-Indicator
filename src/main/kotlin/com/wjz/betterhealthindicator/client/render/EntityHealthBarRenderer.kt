@@ -388,7 +388,10 @@ object EntityHealthBarRenderer {
         when (config.barStyle) {
             BarStyle.BAR -> submitBar(collector, poseStack, base, barHeight, healthRatio, config)
             BarStyle.HEARTS -> heartMultiplier =
-                submitHearts(collector, poseStack, base, barHeight, entity.health, entity.maxHealth, config)
+                submitHearts(
+                    collector, poseStack, base, barHeight, entity.health, entity.maxHealth, config,
+                    HeartBlinkTracker.update(entity.id, entity.health),
+                )
             BarStyle.NUMERIC -> {} // 数值样式仅显示文本
         }
 
@@ -538,9 +541,12 @@ object EntityHealthBarRenderer {
         health: Float,
         maxHealth: Float,
         config: HealthIndicatorConfig,
+        blinking: Boolean,
     ): Int {
         val view = HeartLayout.compute(health, maxHealth, config)
         val halfSize = HeartGraphics.SIZE / 2.0f
+        // 受击/回血高亮：心容器外圈闪白（container_blinking）。
+        val containerTexture = if (blinking) HeartGraphics.CONTAINER_BLINKING else HeartGraphics.CONTAINER
 
         // 只有两层：container 背板 + 每槽位“自己算出的那一张/两张半心”。
         // 多层血条出现半心时，不再用“下层满心 + 上层半心叠绘”（叠绘会与下层冲突），
@@ -553,7 +559,7 @@ object EntityHealthBarRenderer {
         // 当前层半心的填充侧：drainFromRight 时填充屏幕左半（与血条扣血方向一致）。
         val fillFlip = config.drainFromRight
         for (slot in view.slots) {
-            add(containerLayer, HeartGraphics.CONTAINER, slot.cx, false)
+            add(containerLayer, containerTexture, slot.cx, false)
             for (q in topHeartQuads(slot, fillFlip)) add(heartLayer, q.texture, slot.cx, q.flipU)
         }
 
