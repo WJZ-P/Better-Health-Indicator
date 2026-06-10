@@ -71,6 +71,12 @@ object EntityHealthBarRenderer {
     // 仅用于打破与 container 的共面平局，故取很小的值即可。
     private const val HEART_DEPTH_BIAS = 0.0015
 
+    // 受击爱心散开：基础强度（局部像素，单颗心宽约 9）+ 轻/中/重档倍率；档次阈值与掉落粒子一致。
+    private const val HEART_SCATTER_STRENGTH = 3.0f
+    private const val HEART_SCATTER_LIGHT = 1.0f
+    private const val HEART_SCATTER_MEDIUM = 1.8f
+    private const val HEART_SCATTER_HEAVY = 3.0f
+
     // —— 死亡破碎序列 ——
     // 生物死亡后不立刻炸开，而是先「高频抖动」预警，再沿扣血方向逐颗炸裂，更具仪式感。
     private const val DEATH_SHAKE_TICKS = 4 // 预警抖动时长（约 0.2s）
@@ -245,6 +251,11 @@ object EntityHealthBarRenderer {
         val hpPerHeart = HeartLayout.hpPerHeart(maxHealth, config)
         if (hpPerHeart <= 0.0f) return
 
+        // 受击：登记爱心散开（仅心形样式；档次阈值与掉落粒子一致，独立于粒子开关）。
+        if (config.barStyle == BarStyle.HEARTS) {
+            HeartScatterTracker.trigger(entity.id, scatterAmplitude(previous - current, config))
+        }
+
         // 致命一击：登记 container 破碎序列（先抖动预警，再沿扣血方向逐颗炸裂）。
         // 与掉落爱心粒子相互独立，各自有开关；彩色心走下方逐心粒子，不在序列中重复处理。
         if (config.containerShatterEnabled && current <= 0.0f && previous > 0.0f) {
@@ -359,6 +370,18 @@ object EntityHealthBarRenderer {
     }
 
     /** 某颗心当前填充对应的半心数（0/1/2），阈值与渲染填充判定保持一致。 */
+    /** 受击散开初始强度：档次阈值（轻/中/重）与掉落粒子保持一致，强度由全局常量调节。 */
+    private fun scatterAmplitude(damage: Float, config: HealthIndicatorConfig): Float {
+        val medium = config.particleMediumDamage.toFloat()
+        val heavy = config.particleHeavyDamage.toFloat()
+        val mult = when {
+            damage > heavy -> HEART_SCATTER_HEAVY
+            damage >= medium -> HEART_SCATTER_MEDIUM
+            else -> HEART_SCATTER_LIGHT
+        }
+        return HEART_SCATTER_STRENGTH * mult
+    }
+
     private fun halvesOf(fill: Float, hpPerHeart: Float): Int = when (HeartLayout.fillFor(fill, hpPerHeart)) {
         HeartLayout.Top.FULL -> 2
         HeartLayout.Top.HALF -> 1
@@ -389,7 +412,7 @@ object EntityHealthBarRenderer {
             BarStyle.BAR -> submitBar(collector, poseStack, base, barHeight, healthRatio, config)
             BarStyle.HEARTS -> heartMultiplier =
                 submitHearts(
-                    collector, poseStack, base, barHeight, entity.health, entity.maxHealth, config,
+                    collector, poseStack, base, barHeight, entity.id, entity.health, entity.maxHealth, config,
                     HeartBlinkTracker.update(entity.id, entity.health),
                 )
             BarStyle.NUMERIC -> {} // 数值样式仅显示文本
@@ -538,6 +561,7 @@ object EntityHealthBarRenderer {
         poseStack: PoseStack,
         base: Vec3,
         height: Double,
+        entityId: Int,
         health: Float,
         maxHealth: Float,
         config: HealthIndicatorConfig,
@@ -553,14 +577,18 @@ object EntityHealthBarRenderer {
         // 而是把当前层半心（保留侧）与下层半心（空缺侧）作为左右互补的两片异色半心**并排不叠**绘制，从根本上规避共面冲突。
         val containerLayer = LinkedHashMap<Identifier, MutableList<HeartQuad>>()
         val heartLayer = LinkedHashMap<Identifier, MutableList<HeartQuad>>()
-        fun add(map: LinkedHashMap<Identifier, MutableList<HeartQuad>>, texture: Identifier, cx: Float, flipU: Boolean) =
-            map.getOrPut(texture) { ArrayList() }.add(HeartQuad(cx, flipU))
+        fun add(map: LinkedHashMap<Identifier, MutableList<HeartQuad>>, texture: Identifier, cx: Float, cy: Float, flipU: Boolean) =
+            map.getOrPut(texture) { ArrayList() }.add(HeartQuad(cx, flipU, cy))
 
         // 当前层半心的填充侧：drainFromRight 时填充屏幕左半（与血条扣血方向一致）。
         val fillFlip = config.drainFromRight
-        for (slot in view.slots) {
-            add(containerLayer, containerTexture, slot.cx, false)
-            for (q in topHeartQuads(slot, fillFlip)) add(heartLayer, q.texture, slot.cx, q.flipU)
+        view.slots.forEachIndexed { index, slot ->
+            // 受击散开：整颗心（container 背板 + 彩色层）按各自随机方向偏移再衰减回归。
+            val scatter = HeartScatterTracker.offset(entityId, index)
+            val cx = slot.cx + scatter[0]
+            val cy = scatter[1]
+            add(containerLayer, containerTexture, cx, cy, false)
+            for (q in topHeartQuads(slot, fillFlip)) add(heartLayer, q.texture, cx, cy, q.flipU)
         }
 
         // 把“世界深度偏移”换算为 billboard 局部 z：billboard 会以 config.scale 缩放局部坐标，故局部 z = 世界偏移 / scale。
