@@ -70,12 +70,7 @@ object ClothConfigScreenFactory {
         )
 
         val head = builder.getOrCreateCategory(Component.literal("头顶血条"))
-        head.addEntry(
-            entry.startBooleanToggle(Component.literal("启用头顶血条"), config.headBarEnabled)
-                .setDefaultValue(Defaults.HEAD_BAR_ENABLED)
-                .setSaveConsumer { config.headBarEnabled = it }
-                .build(),
-        )
+
         head.addEntry(
             entry.startEnumSelector(Component.literal("血条样式"), BarStyle::class.java, config.barStyle)
                 .setDefaultValue(Defaults.BAR_STYLE)
@@ -235,6 +230,13 @@ object ClothConfigScreenFactory {
                 .setDefaultValue(Defaults.PANEL_HEART_HIGHLIGHT)
                 .setTooltip(Component.literal("心形样式下，目标扣血/回血时心容器外圈闪白（还原原版受伤反馈）"))
                 .setSaveConsumer { config.panelHeartHighlight = it }
+                .build(),
+        )
+        panel.addEntry(
+            entry.startBooleanToggle(Component.literal("显示状态效果"), config.panelShowEffects)
+                .setDefaultValue(Defaults.PANEL_SHOW_EFFECTS)
+                .setTooltip(Component.literal("血条下方排一行目标的药水效果图标。注意：原版不同步非玩家生物的效果给客户端，故仅在单机/自开局域网有效，进别人服务器对其它生物无效"))
+                .setSaveConsumer { config.panelShowEffects = it }
                 .build(),
         )
         panel.addEntry(

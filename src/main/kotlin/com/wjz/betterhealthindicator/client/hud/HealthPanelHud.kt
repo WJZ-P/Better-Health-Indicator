@@ -16,19 +16,20 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
+import net.minecraft.client.gui.Gui
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.util.Mth
+import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
 import org.joml.Quaternionf
 import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.ceil
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -50,6 +51,17 @@ object HealthPanelHud {
     // —— 心形血条（复用 HeartLayout 布局；走 GUI 图集 sprite） ——
     private const val HEART_SIZE = 9 // 单颗心贴图边长（像素，原版尺寸）
     private const val HEART_STEP = 8 // 相邻心横向步距（略叠，原版一致）
+
+    // —— 状态效果（药水）图标：血条下方排一行，走 GUI 图集 sprite（背板 + mob_effect/<id> 图标）——
+    private const val EFFECT_BG_SIZE = 16    // 效果背板(container)边长（原版 24，面板按比例内缩）
+    private const val EFFECT_ICON_SIZE = 12  // 图标边长（= 背板 × 3/4，与原版 18/24 同比例，居中）
+    private const val EFFECT_ICON_INSET = (EFFECT_BG_SIZE - EFFECT_ICON_SIZE) / 2 // 图标相对背板内缩(2px)
+    private const val EFFECT_GAP = 1         // 相邻背板横向间隙
+    private const val EFFECT_STEP = EFFECT_BG_SIZE + EFFECT_GAP
+
+    // 效果背板 sprite（与原版 HUD 同款）：普通 / ambient（信标等环境效果）两种。
+    private val EFFECT_BG_SPRITE = Identifier.withDefaultNamespace("hud/effect_background")
+    private val EFFECT_BG_AMBIENT_SPRITE = Identifier.withDefaultNamespace("hud/effect_background_ambient")
 
     // 圆形视口边框粗细（像素）；各处配色统一见 [Theme]（深/浅两套主题）。
     private const val FRAME_BORDER_THICKNESS = 1
@@ -172,13 +184,22 @@ object HealthPanelHud {
                 // 心形样式：预先算好布局，使面板宽度能容纳整排爱心。
                 val heartsView = if (config.panelBarStyle == PanelBarStyle.HEARTS)
                     HeartLayout.compute(target.health, target.maxHealth, config) else null
+                // 目标当前状态效果（仅取带 icon 的），在血条下方排一行药水图标。
+                // 原版不同步非玩家生物效果给客户端，故经内置服务器读取真实效果（仅单机/自开局域网有效）。
+                val effects = if (config.panelShowEffects) {
+                    resolveEffects(target).filter { it.showIcon() }
+                } else {
+                    emptyList()
+                }
                 val nameNeed = contentLeft + fullNameWidth + CONTENT_RIGHT_PAD
+                // 一行图标的理想宽度需求；面板会据此在「默认~最大」间加宽，放不下再在渲染时尾随「+N」。
+                val effectsNeed = if (effects.isEmpty()) 0 else contentLeft + effectsRowWidth(effects.size) + CONTENT_RIGHT_PAD
                 val panelWidth = if (heartsView != null) {
-                    // 心形：宽度完全由内容（名字 / 整排爱心，含多层异色）决定，不设最小宽度，仅受最大宽度限制。
-                    max(nameNeed, contentLeft + heartsWidth(heartsView, font) + CONTENT_RIGHT_PAD)
+                    // 心形：宽度完全由内容（名字 / 整排爱心，含多层异色 / 药水图标行）决定，仅受最大宽度限制。
+                    maxOf(nameNeed, contentLeft + heartsWidth(heartsView, font) + CONTENT_RIGHT_PAD, effectsNeed)
                         .coerceAtMost(PANEL_WIDTH_MAX)
                 } else {
-                    nameNeed.coerceIn(PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX)
+                    maxOf(nameNeed, effectsNeed).coerceIn(PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX)
                 }
                 val maxNameWidth = panelWidth - contentLeft - CONTENT_RIGHT_PAD
                 val nameText = fitName(font, target.displayName, bold, maxNameWidth)
@@ -204,11 +225,14 @@ object HealthPanelHud {
                 }
 
                 val textX = frameX1 + 6
-                graphics.text(font, nameText, textX, panelY + 6, NAME_COLOR, true)
+                // 有药水效果时：名字与血条上移、间距收紧，给底部腾出一行带背板的图标空间（背板 16px）。
+                val hasEffects = effects.isNotEmpty()
+                val nameY = panelY + if (hasEffects) 4 else 6
+                val barY0 = panelY + if (hasEffects) 13 else 22
+                graphics.text(font, nameText, textX, nameY, NAME_COLOR, true)
 
                 val barX0 = textX
                 val barX1 = panelX + panelWidth - PADDING - 4
-                val barY0 = panelY + 22
                 val barY1 = barY0 + BAR_HEIGHT
                 if (heartsView != null) {
                     // 心形血条：血量变化时心容器外圈闪白（受击/回血反馈，可配置关闭）。
@@ -218,6 +242,12 @@ object HealthPanelHud {
                     // 纯色血条：凹槽 + 描边 + 随血量红→黄→绿渐变前景 + 顶部高光，血量数值居中叠加其上。
                     val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
                     drawHealthBar(graphics, theme, font, barX0, barY0, barX1, barY1, healthRatio, target.health, target.maxHealth, bold)
+                }
+
+                // 血条下方排一行状态效果图标；放不下的在末尾以「+N」表示剩余数量。
+                if (hasEffects) {
+                    val contentWidth = panelWidth - contentLeft - CONTENT_RIGHT_PAD
+                    drawEffects(graphics, font, textX, barY1 + 1, effects, contentWidth)
                 }
             },
         )
@@ -264,6 +294,66 @@ object HealthPanelHud {
         var w = view.slots.size * HEART_STEP + (HEART_SIZE - HEART_STEP)
         if (view.multiplier > 0) w += 2 + font.width("× ${view.multiplier}")
         return w
+    }
+
+    /**
+     * 解析目标当前的状态效果。原版仅把「玩家自身」的效果同步给客户端，其它生物效果不下发，
+     * 因此优先经内置服务器（单机 / 自开局域网）按实体 id 取服务端实体读取真实效果；
+     * 取不到（纯联机进别人服 / 实体不在服务端）时退回客户端数据（对其它生物即为空）。
+     */
+    private fun resolveEffects(target: LivingEntity): Collection<MobEffectInstance> {
+        val server = Minecraft.getInstance().singleplayerServer ?: return target.activeEffects
+        val serverEntity = server.getLevel(target.level().dimension())?.getEntity(target.id)
+        if (serverEntity is LivingEntity) {
+            // 跨线程读取服务端效果表：防御性拷贝，规避并发修改导致的异常。
+            return try {
+                ArrayList(serverEntity.activeEffects)
+            } catch (_: Exception) {
+                target.activeEffects
+            }
+        }
+        return target.activeEffects
+    }
+
+    /** 一行 [count] 个状态效果图标的像素宽度（含图标间隙，末尾不计间隙）。 */
+    private fun effectsRowWidth(count: Int): Int = if (count <= 0) 0 else count * EFFECT_STEP - EFFECT_GAP
+
+    /**
+     * 在 ([x0], [y]) 起绘制一行状态效果图标，限制在 [maxWidth] 像素内：
+     * 全部放得下则逐个绘制；否则尽量多放图标，并在末尾以「+N」标注未显示的剩余数量。
+     */
+    private fun drawEffects(
+        graphics: GuiGraphicsExtractor,
+        font: net.minecraft.client.gui.Font,
+        x0: Int,
+        y: Int,
+        effects: List<MobEffectInstance>,
+        maxWidth: Int,
+    ) {
+        val n = effects.size
+        if (n == 0 || maxWidth < EFFECT_BG_SIZE) return
+        // 全部放得下：逐个绘制。
+        if (effectsRowWidth(n) <= maxWidth) {
+            for (i in 0 until n) drawEffectIcon(graphics, effects[i], x0 + i * EFFECT_STEP, y)
+            return
+        }
+        // 放不下：尾随「+rem」标签，反向收缩背板数 k 直到「k 个背板 + 标签」能放下。
+        var k = ((maxWidth + EFFECT_GAP) / EFFECT_STEP).coerceAtMost(n - 1)
+        while (k > 0 && k * EFFECT_STEP + font.width("+${n - k}") > maxWidth) k--
+        for (i in 0 until k) drawEffectIcon(graphics, effects[i], x0 + i * EFFECT_STEP, y)
+        val label = Component.literal("+${n - k}")
+        graphics.text(font, label, x0 + k * EFFECT_STEP, y + (EFFECT_BG_SIZE - font.lineHeight) / 2, NAME_COLOR, true)
+    }
+
+    /** 绘制单个状态效果：先铺背板(container，ambient 用专属背板)，再居中叠 mob_effect/<id> 图标。 */
+    private fun drawEffectIcon(graphics: GuiGraphicsExtractor, instance: MobEffectInstance, x: Int, y: Int) {
+        val background = if (instance.isAmbient) EFFECT_BG_AMBIENT_SPRITE else EFFECT_BG_SPRITE
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, background, x, y, EFFECT_BG_SIZE, EFFECT_BG_SIZE)
+        val sprite = Gui.getMobEffectSprite(instance.effect)
+        graphics.blitSprite(
+            RenderPipelines.GUI_TEXTURED, sprite,
+            x + EFFECT_ICON_INSET, y + EFFECT_ICON_INSET, EFFECT_ICON_SIZE, EFFECT_ICON_SIZE,
+        )
     }
 
     /**

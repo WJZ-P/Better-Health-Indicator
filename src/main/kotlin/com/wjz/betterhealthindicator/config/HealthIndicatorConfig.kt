@@ -131,6 +131,9 @@ class HealthIndicatorConfig {
     var panelBarStyle: PanelBarStyle = Defaults.PANEL_BAR_STYLE
     // 心形样式下，目标扣血/回血时心容器外圈闪白高亮（还原原版受伤反馈）。
     var panelHeartHighlight: Boolean = Defaults.PANEL_HEART_HIGHLIGHT
+    // 面板血条下方显示目标的状态效果（药水）图标。注意：原版不会把非玩家生物的效果同步给客户端，
+    // 故此功能仅在单机 / 自己开的局域网世界（可读内置服务器）有效；进别人的服务器对其它生物无效。
+    var panelShowEffects: Boolean = Defaults.PANEL_SHOW_EFFECTS
     var panelShowModel: Boolean = Defaults.PANEL_SHOW_MODEL
     // 面板内名字与血量文本是否加粗（位图字体无连续字重，仅能通过 BOLD 样式加粗）。
     var panelTextBold: Boolean = Defaults.PANEL_TEXT_BOLD
@@ -185,6 +188,7 @@ class HealthIndicatorConfig {
         val PANEL_THEME: PanelTheme = PanelTheme.LIGHT
         val PANEL_BAR_STYLE: PanelBarStyle = PanelBarStyle.BAR
         const val PANEL_HEART_HIGHLIGHT: Boolean = true
+        const val PANEL_SHOW_EFFECTS: Boolean = true
         const val PANEL_SHOW_MODEL: Boolean = true
         const val PANEL_TEXT_BOLD: Boolean = false
         const val PANEL_SCALE: Float = 1.0f
