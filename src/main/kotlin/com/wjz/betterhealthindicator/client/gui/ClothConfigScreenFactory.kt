@@ -91,8 +91,15 @@ object ClothConfigScreenFactory {
         head.addEntry(
             entry.startBooleanToggle(Component.literal("显示血量数值"), config.showHealthText)
                 .setDefaultValue(Defaults.SHOW_HEALTH_TEXT)
-                .setTooltip(Component.literal("开启后在名字同一行追加「当前/上限」血量数值"))
+                .setTooltip(Component.literal("开启后在名字同一行追加「当前/上限」血量数值；关闭时多倍血条生物改在该位置显示「x倍数」"))
                 .setSaveConsumer { config.showHealthText = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startBooleanToggle(Component.literal("受击反馈特效"), config.headHeartHitEffect)
+                .setDefaultValue(Defaults.HEAD_HEART_HIT_EFFECT)
+                .setTooltip(Component.literal("心形血条受击/回血时：心容器外圈闪白高亮 + 整颗心散开晃动倾斜"))
+                .setSaveConsumer { config.headHeartHitEffect = it }
                 .build(),
         )
         head.addEntry(

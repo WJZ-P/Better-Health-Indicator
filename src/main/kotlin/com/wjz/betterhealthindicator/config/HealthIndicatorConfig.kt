@@ -94,6 +94,8 @@ class HealthIndicatorConfig {
     var relativeHeartCount: Int = Defaults.RELATIVE_HEART_COUNT
     var showName: Boolean = Defaults.SHOW_NAME
     var showHealthText: Boolean = Defaults.SHOW_HEALTH_TEXT
+    // 头顶心形血条受击反馈（白光高亮 + 整颗心散开晃动）统一开关；默认开启。
+    var headHeartHitEffect: Boolean = Defaults.HEAD_HEART_HIT_EFFECT
     // 名字文本相对原版名牌字号的倍率（自绘文本，1.0 = 原版大小）。
     var textScale: Double = Defaults.TEXT_SCALE
     // 血量数值文本相对原版名牌字号的倍率，默认比名字略小以作区分。
@@ -156,6 +158,7 @@ class HealthIndicatorConfig {
         const val RELATIVE_HEART_COUNT: Int = 10
         const val SHOW_NAME: Boolean = true
         const val SHOW_HEALTH_TEXT: Boolean = false
+        const val HEAD_HEART_HIT_EFFECT: Boolean = true
         const val TEXT_SCALE: Double = 1.0
         const val HEALTH_TEXT_SCALE: Double = 0.7
         const val TEXT_BOLD: Boolean = false

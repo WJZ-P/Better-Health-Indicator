@@ -262,7 +262,7 @@ object HealthPanelHud {
     /** 心形血条所需像素宽度（整排爱心 + 可能的 xN 倍数标注），用于面板宽度自适应。 */
     private fun heartsWidth(view: HeartLayout.View, font: net.minecraft.client.gui.Font): Int {
         var w = view.slots.size * HEART_STEP + (HEART_SIZE - HEART_STEP)
-        if (view.multiplier > 0) w += 2 + font.width("×${view.multiplier}")
+        if (view.multiplier > 0) w += 2 + font.width("× ${view.multiplier}")
         return w
     }
 
@@ -309,8 +309,10 @@ object HealthPanelHud {
             }
         }
         if (view.multiplier > 0) {
-            val label = Component.literal("×${view.multiplier}")
-            graphics.text(font, label, x0 + ordered.size * HEART_STEP + 2, centerY - font.lineHeight / 2, NAME_COLOR, true)
+            val label = Component.literal("× ${view.multiplier}")
+            // 与头顶一致：按倍数分档着色（补足不透明 alpha）。
+            val color = 0xFF000000.toInt() or HeartLayout.multiplierColor(view.multiplier)
+            graphics.text(font, label, x0 + ordered.size * HEART_STEP + 2, centerY - font.lineHeight / 2, color, true)
         }
     }
 

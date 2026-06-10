@@ -45,9 +45,21 @@ object HeartLayout {
 
     /**
      * @param slots 槽位列表
-     * @param multiplier >paletteSize 层时显示的 xN 倍数；为 0 表示不显示
+     * @param multiplier 当前血量多于一排时显示的 xN 倍数（N=当前血量所占排数，随掉血动态递减）；为 0 表示仅剩一排、不显示
      */
     class View(val slots: List<Slot>, val multiplier: Int)
+
+    /**
+     * 多倍血条「xN」倍数的分档配色（RGB，不含 alpha），头顶与面板共用以保持一致：
+     * x20+ 紫、x15+ 金、x10+ 蓝、x5+ 绿、x2~4 白。
+     */
+    fun multiplierColor(multiplier: Int): Int = when {
+        multiplier >= 20 -> 0xAA55FF
+        multiplier >= 15 -> 0xFFD700
+        multiplier >= 10 -> 0x55AAFF
+        multiplier >= 5 -> 0x55FF55
+        else -> 0xFFFFFF
+    }
 
     private fun isTiered(maxHealth: Float, config: HealthIndicatorConfig): Boolean =
         config.healthMode == HealthMode.ABSOLUTE && config.tieredHearts && maxHealth > LAYER_HP
@@ -76,13 +88,14 @@ object HeartLayout {
 
     /** 分层异色：固定一排，每满 20HP 进入下一层颜色，空出的顶层揭示下一层满心而非黑底。 */
     private fun computeTiered(health: Float, maxHealth: Float, config: HealthIndicatorConfig): View {
-        val totalLayers = ceil(maxHealth / LAYER_HP).toInt().coerceAtLeast(1)
         val currentLayer = (ceil(health / LAYER_HP).toInt() - 1).coerceAtLeast(0)
         val hpInTop = health - currentLayer * LAYER_HP
         val topTier = HeartGraphics.HeartTier.byLayer(currentLayer)
         val baseTier = if (currentLayer > 0) HeartGraphics.HeartTier.byLayer(currentLayer - 1) else null
-        val paletteSize = HeartGraphics.HeartTier.entries.size
-        val multiplier = if (totalLayers > paletteSize) totalLayers else 0
+        // 倍数动态跟随「当前血量」所占排数：N = ceil(health/20)。掉血跨过整排边界即递减；
+        // 当前血量 <=20（仅剩一排）则为 1，不标注——故只有当前多于一排时才显示「xN」。
+        val currentLayers = currentLayer + 1
+        val multiplier = if (currentLayers >= 2) currentLayers else 0
 
         val slots = buildSlots(HEARTS_PER_ROW, config.drainFromRight) { logical ->
             val top = fillFor(hpInTop - logical * HP_PER_HEART, HP_PER_HEART)

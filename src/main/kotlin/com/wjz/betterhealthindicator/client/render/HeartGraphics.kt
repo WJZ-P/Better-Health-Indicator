@@ -5,6 +5,8 @@ import net.minecraft.client.renderer.texture.OverlayTexture
 import net.minecraft.resources.Identifier
 import net.minecraft.util.LightCoordsUtil
 import org.joml.Matrix4f
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** 心形精灵路径构造。提为顶层函数，避免枚举条目反向依赖 [HeartGraphics] 对象造成循环初始化。 */
 private fun heartSprite(name: String): Identifier =
@@ -84,6 +86,37 @@ object HeartGraphics {
         vertex(consumer, matrix, right, bottom, uRight, 1.0f, color, z)
         vertex(consumer, matrix, right, top, uRight, 0.0f, color, z)
         vertex(consumer, matrix, left, top, uLeft, 0.0f, color, z)
+    }
+
+    /**
+     * 绘制一个绕自身中心旋转 [rot] 弧度的贴图四边形（单面）。
+     * 用于头顶爱心受击时，让整颗心以中心为轴整体往左/右偏转一定角度。
+     * @param cx,cy 心中心坐标；@param half 半边长（贴图尺寸的一半）。
+     */
+    fun quadRotated(
+        consumer: VertexConsumer,
+        matrix: Matrix4f,
+        cx: Float,
+        cy: Float,
+        half: Float,
+        color: Int,
+        rot: Float,
+        flipU: Boolean = false,
+        z: Float = 0.0f,
+    ) {
+        val uLeft = if (flipU) 1.0f else 0.0f
+        val uRight = if (flipU) 0.0f else 1.0f
+        val cosR = cos(rot)
+        val sinR = sin(rot)
+        fun corner(dx: Float, dy: Float, u: Float, v: Float) {
+            val rx = dx * cosR - dy * sinR
+            val ry = dx * sinR + dy * cosR
+            vertex(consumer, matrix, cx + rx, cy + ry, u, v, color, z)
+        }
+        corner(-half, half, uLeft, 1.0f)
+        corner(half, half, uRight, 1.0f)
+        corner(half, -half, uRight, 0.0f)
+        corner(-half, -half, uLeft, 0.0f)
     }
 
     /**
