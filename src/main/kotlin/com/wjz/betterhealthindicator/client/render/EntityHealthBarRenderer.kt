@@ -44,6 +44,9 @@ object EntityHealthBarRenderer {
 
     // 原版浮空名牌的基准字号（局部缩放）；自绘文本以此为基准再乘以 config.textScale。
     private const val NAME_TAG_SCALE = 0.025f
+
+    // 名字行末尾「x倍数」相对名字字号的缩放系数；<1 即比名字更小，调小这里可让倍数更不抢眼。
+    private const val MULTIPLIER_SCALE = 0.75f
     // —— 文本配色（统一在此调整）——
     // 名字与血量之间的分隔符 / 斜杠颜色（中性灰）。
     private const val SEPARATOR_COLOR = 0xAAAAAA
@@ -467,7 +470,7 @@ object EntityHealthBarRenderer {
                 Component.literal("x $heartMultiplier").withColor(HeartLayout.multiplierColor(heartMultiplier)),
                 config,
             )
-            segments.add(TextSegment(multComp, nameScale))
+            segments.add(TextSegment(multComp, nameScale * MULTIPLIER_SCALE))
         }
         if (segments.isNotEmpty()) {
             // 数值样式无血条几何，文本落在血条基准高度；其余样式落在血条上方。
