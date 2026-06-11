@@ -98,6 +98,13 @@ object ClothConfigScreenFactory {
                 .build(),
         )
         head.addEntry(
+            entry.startBooleanToggle(Component.literal("屏蔽原版名字标签"), config.hideVanillaNameTag)
+                .setDefaultValue(Defaults.HIDE_VANILLA_NAME_TAG)
+                .setTooltip(Component.literal("隐其原版浮空名字(玩家名、命名牌等)，避免名字重复与遮挡；未绘制血条的实体不受影响"))
+                .setSaveConsumer { config.hideVanillaNameTag = it }
+                .build(),
+        )
+        head.addEntry(
             entry.startDoubleField(Component.literal("名字字号倍率"), config.textScale)
                 .setMin(0.3)
                 .setMax(3.0)

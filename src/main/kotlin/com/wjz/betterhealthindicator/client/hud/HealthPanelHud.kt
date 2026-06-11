@@ -12,6 +12,9 @@ import com.wjz.betterhealthindicator.client.render.EntitySelector
 import com.wjz.betterhealthindicator.client.render.HeartBlinkTracker
 import com.wjz.betterhealthindicator.client.render.HeartGraphics
 import com.wjz.betterhealthindicator.client.render.HeartLayout
+import com.wjz.betterhealthindicator.client.render.MobEffectParticleIndex
+import net.minecraft.core.Holder
+import net.minecraft.world.effect.MobEffect
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
@@ -23,7 +26,6 @@ import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.util.Mth
-import net.minecraft.world.effect.MobEffectInstance
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
 import org.joml.Quaternionf
@@ -184,13 +186,8 @@ object HealthPanelHud {
                 // 心形样式：预先算好布局，使面板宽度能容纳整排爱心。
                 val heartsView = if (config.panelBarStyle == PanelBarStyle.HEARTS)
                     HeartLayout.compute(target.health, target.maxHealth, config) else null
-                // 目标当前状态效果（仅取带 icon 的），在血条下方排一行药水图标。
-                // 原版不同步非玩家生物效果给客户端，故经内置服务器读取真实效果（仅单机/自开局域网有效）。
-                val effects = if (config.panelShowEffects) {
-                    resolveEffects(target).filter { it.showIcon() }
-                } else {
-                    emptyList()
-                }
+                // 目标当前状态效果，在血条下方排一行药水图标。来源见 [resolveEffects]（内置服务器优先，粒子反查兜底）。
+                val effects = if (config.panelShowEffects) resolveEffects(target) else emptyList()
                 val nameNeed = contentLeft + fullNameWidth + CONTENT_RIGHT_PAD
                 // 一行图标的理想宽度需求；面板会据此在「默认~最大」间加宽，放不下再在渲染时尾随「+N」。
                 val effectsNeed = if (effects.isEmpty()) 0 else contentLeft + effectsRowWidth(effects.size) + CONTENT_RIGHT_PAD
@@ -296,23 +293,40 @@ object HealthPanelHud {
         return w
     }
 
+    /** 面板要展示的一个效果：用于绘制的 sprite 来源（效果 Holder）+ 是否环境效果（决定背板）。 */
+    private data class EffectDisplay(val effect: Holder<MobEffect>, val ambient: Boolean)
+
     /**
-     * 解析目标当前的状态效果。原版仅把「玩家自身」的效果同步给客户端，其它生物效果不下发，
-     * 因此优先经内置服务器（单机 / 自开局域网）按实体 id 取服务端实体读取真实效果；
-     * 取不到（纯联机进别人服 / 实体不在服务端）时退回客户端数据（对其它生物即为空）。
+     * 解析目标当前的状态效果（仅取要展示的），按精确度三级回退：
+     * 1. 单机 / 自开局域网：经内置服务器按 id 取服务端实体，读真实效果（最准确、含全部效果）；
+     * 2. 客户端本地已持有效果（玩家自身等）：直接用；
+     * 3. 兜底：用同步下发的效果粒子（[MobEffectParticleIndex]）反查回效果——对联机里的其它生物也生效，
+     *    但只覆盖「显示粒子」的非瞬间效果，且拿不到等级/时长（仅够画 icon）。
      */
-    private fun resolveEffects(target: LivingEntity): Collection<MobEffectInstance> {
-        val server = Minecraft.getInstance().singleplayerServer ?: return target.activeEffects
-        val serverEntity = server.getLevel(target.level().dimension())?.getEntity(target.id)
-        if (serverEntity is LivingEntity) {
-            // 跨线程读取服务端效果表：防御性拷贝，规避并发修改导致的异常。
-            return try {
-                ArrayList(serverEntity.activeEffects)
-            } catch (_: Exception) {
-                target.activeEffects
+    private fun resolveEffects(target: LivingEntity): List<EffectDisplay> {
+        // 1) 内置服务器的精确效果（跨线程读取做防御性拷贝）。
+        val server = Minecraft.getInstance().singleplayerServer
+        if (server != null) {
+            val serverEntity = server.getLevel(target.level().dimension())?.getEntity(target.id)
+            if (serverEntity is LivingEntity) {
+                val exact = try {
+                    ArrayList(serverEntity.activeEffects)
+                } catch (_: Exception) {
+                    null
+                }
+                if (exact != null) return exact.filter { it.showIcon() }.map { EffectDisplay(it.effect, it.isAmbient) }
             }
         }
-        return target.activeEffects
+        // 2) 客户端本地效果（玩家自身在任意环境都有）。
+        val local = target.activeEffects
+        if (local.isNotEmpty()) return local.filter { it.showIcon() }.map { EffectDisplay(it.effect, it.isAmbient) }
+        // 3) 兜底：同步效果粒子反查（其它生物，联机也生效）。
+        val particles = MobEffectParticleIndex.syncedParticles(target)
+        if (particles.isEmpty()) return emptyList()
+        val ambient = MobEffectParticleIndex.allAmbient(target)
+        val seen = LinkedHashSet<Holder<MobEffect>>()
+        for (particle in particles) MobEffectParticleIndex.resolve(particle)?.let { seen.add(it) }
+        return seen.map { EffectDisplay(it, ambient) }
     }
 
     /** 一行 [count] 个状态效果图标的像素宽度（含图标间隙，末尾不计间隙）。 */
@@ -327,7 +341,7 @@ object HealthPanelHud {
         font: net.minecraft.client.gui.Font,
         x0: Int,
         y: Int,
-        effects: List<MobEffectInstance>,
+        effects: List<EffectDisplay>,
         maxWidth: Int,
     ) {
         val n = effects.size
@@ -346,10 +360,10 @@ object HealthPanelHud {
     }
 
     /** 绘制单个状态效果：先铺背板(container，ambient 用专属背板)，再居中叠 mob_effect/<id> 图标。 */
-    private fun drawEffectIcon(graphics: GuiGraphicsExtractor, instance: MobEffectInstance, x: Int, y: Int) {
-        val background = if (instance.isAmbient) EFFECT_BG_AMBIENT_SPRITE else EFFECT_BG_SPRITE
+    private fun drawEffectIcon(graphics: GuiGraphicsExtractor, display: EffectDisplay, x: Int, y: Int) {
+        val background = if (display.ambient) EFFECT_BG_AMBIENT_SPRITE else EFFECT_BG_SPRITE
         graphics.blitSprite(RenderPipelines.GUI_TEXTURED, background, x, y, EFFECT_BG_SIZE, EFFECT_BG_SIZE)
-        val sprite = Gui.getMobEffectSprite(instance.effect)
+        val sprite = Gui.getMobEffectSprite(display.effect)
         graphics.blitSprite(
             RenderPipelines.GUI_TEXTURED, sprite,
             x + EFFECT_ICON_INSET, y + EFFECT_ICON_INSET, EFFECT_ICON_SIZE, EFFECT_ICON_SIZE,

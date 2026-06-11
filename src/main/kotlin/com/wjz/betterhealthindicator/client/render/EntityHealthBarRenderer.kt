@@ -89,6 +89,22 @@ object EntityHealthBarRenderer {
     private val lastHealth = HashMap<Int, Float>()
     private val seenEntities = HashSet<Int>()
 
+    // 本渲染帧实际绘制了头顶血条的实体 id 集合；供 Mixin 决定是否屏蔽其原版名字标签。
+    // 在 collect() 起始处清空、提交血条时写入；名字标签提取与本集合同处渲染线程，至多一帧延迟，肉眼无感。
+    private val headBarShownThisFrame = HashSet<Int>()
+
+    /**
+     * 该实体的原版名字标签是否应被屏蔽：仅当总开关开启、头顶血条启用、本帧确实为其绘制了血条时为真。
+     * 供 [com.wjz.betterHealthIndicator.mixin.client.EntityRendererMixin] 调用（基类一处覆盖所有实体）。
+     */
+    fun shouldHideVanillaName(entityId: Int): Boolean {
+        val config = ConfigManager.config
+        return config.enabled &&
+            config.headBarEnabled &&
+            config.hideVanillaNameTag &&
+            headBarShownThisFrame.contains(entityId)
+    }
+
     // 本 tick 检测到的待生成粒子：仅记录爱心局部信息，世界坐标推迟到渲染帧解析（见 flushPendingSpawns）。
     private class PendingSpawn(
         val entity: LivingEntity,
@@ -194,6 +210,9 @@ object EntityHealthBarRenderer {
     }
 
     private fun collect(context: LevelRenderContext) {
+        // 先清空本帧的「已显示血条」集合：即便后续提前返回（功能关闭等），也能让名字标签屏蔽随之失效。
+        headBarShownThisFrame.clear()
+
         val config = ConfigManager.config
         if (!config.enabled || !config.headBarEnabled) return
 
@@ -216,6 +235,7 @@ object EntityHealthBarRenderer {
                 if (entity !is LivingEntity) continue
                 if (isDying(entity.id)) continue
                 if (EntitySelector.shouldShow(entity, frame)) {
+                    headBarShownThisFrame.add(entity.id)
                     submit(entity, frame, collector, poseStack, cameraState)
                 }
             }
