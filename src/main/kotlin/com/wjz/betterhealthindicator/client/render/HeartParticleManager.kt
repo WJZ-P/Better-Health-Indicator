@@ -28,7 +28,8 @@ object HeartParticleManager {
     // 物理量按“每 tick”语义取值（1 tick = 1/20 s）。
     private const val GRAVITY = 0.0045 // 每 tick 对竖直速度的衰减（已放缓，掉落更轻盈）
     private const val HORIZONTAL_DRAG = 0.9 // 横向速度每 tick 的保留比例：出生爆发逸散后迅速减速、平稳下落
-    private const val MAX_AGE_TICKS = 28 // 约 1.4s
+    private const val MAX_AGE_TICKS = 28 // 约 1.4s（基准寿命）
+    private const val MAX_AGE_JITTER_TICKS = 5 // 每颗粒子寿命在基准上下随机波动 ±此值（tick），打破整批同时消失的整齐感；0 即不随机
     private const val FADE_TICKS = 5 // 末尾 0.25s 才开始淡出（其余时间不透明，契合像素观感）
     private const val SCALE = 0.025f
     private const val MAX_PARTICLES = 128
@@ -103,6 +104,7 @@ object HeartParticleManager {
         val flipU: Boolean,
         val style: ParticleStyle,
         val phase: Float,
+        val maxAge: Int, // 本颗寿命（tick）：基准 ± 随机波动，错开消失时机
     ) {
         // 上一 tick 的位置，供渲染插值；生成时与当前位置相同，避免首帧跳变。
         var xo = x
@@ -176,6 +178,9 @@ object HeartParticleManager {
             vx = biasX * dirSpeed + vx * 0.35
             vz = biasZ * dirSpeed + vz * 0.35
         }
+        // 寿命随机波动：基准上下 ±MAX_AGE_JITTER_TICKS，错开整批粒子的消失时机；下限确保留得住淡出段。
+        val jitter = if (MAX_AGE_JITTER_TICKS > 0) random.nextInt(MAX_AGE_JITTER_TICKS * 2 + 1) - MAX_AGE_JITTER_TICKS else 0
+        val maxAge = (MAX_AGE_TICKS + jitter).coerceAtLeast(FADE_TICKS + 1)
         particles.add(
             Particle(
                 x,
@@ -188,6 +193,7 @@ object HeartParticleManager {
                 flipU,
                 style,
                 (random.nextDouble() * Math.PI * 2.0).toFloat(),
+                maxAge,
             ),
         )
     }
@@ -288,7 +294,7 @@ object HeartParticleManager {
             p.y += p.vy
             p.z += p.vz
             p.age++
-            if (p.age >= MAX_AGE_TICKS) iterator.remove()
+            if (p.age >= p.maxAge) iterator.remove()
         }
 
         val shardIterator = shards.iterator()
@@ -328,12 +334,12 @@ object HeartParticleManager {
             val pz = p.zo + (p.z - p.zo) * partialTick
             val ageRender = p.ageo + (p.age - p.ageo) * partialTick
 
-            // 仅在末尾 FADE_TICKS 内淡出，其余时间完全不透明。
-            val fadeStart = MAX_AGE_TICKS - FADE_TICKS
+            // 仅在末尾 FADE_TICKS 内淡出，其余时间完全不透明（按本颗随机寿命 p.maxAge 计算）。
+            val fadeStart = p.maxAge - FADE_TICKS
             val fadeFactor = if (ageRender <= fadeStart) {
                 1.0f
             } else {
-                ((MAX_AGE_TICKS - ageRender) / FADE_TICKS).coerceIn(0.0f, 1.0f)
+                ((p.maxAge - ageRender) / FADE_TICKS).coerceIn(0.0f, 1.0f)
             }
             val alpha = (255.0f * fadeFactor).toInt().coerceIn(0, 255)
             val color = (alpha shl 24) or 0xFFFFFF

@@ -1,20 +1,10 @@
 package com.wjz.betterhealthindicator.client.hud
 
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
-import com.wjz.betterhealthindicator.config.ConfigManager
-import com.wjz.betterhealthindicator.config.PanelCorner
-import com.wjz.betterhealthindicator.config.PanelBarStyle
-import com.wjz.betterhealthindicator.config.PanelFrameShape
-import com.wjz.betterhealthindicator.config.PanelTheme
-import com.wjz.betterhealthindicator.client.render.AttackTracker
-import com.wjz.betterhealthindicator.client.render.EntityModelExtents
-import com.wjz.betterhealthindicator.client.render.EntitySelector
-import com.wjz.betterhealthindicator.client.render.HeartBlinkTracker
-import com.wjz.betterhealthindicator.client.render.HeartGraphics
-import com.wjz.betterhealthindicator.client.render.HeartLayout
-import com.wjz.betterhealthindicator.client.render.MobEffectParticleIndex
-import net.minecraft.core.Holder
-import net.minecraft.world.effect.MobEffect
+import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.GLOSS_CELL
+import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.NAME_COLOR
+import com.wjz.betterhealthindicator.client.render.*
+import com.wjz.betterhealthindicator.config.*
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
@@ -23,9 +13,11 @@ import net.minecraft.client.gui.Gui
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
+import net.minecraft.core.Holder
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 import net.minecraft.util.Mth
+import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
 import org.joml.Quaternionf
@@ -49,6 +41,7 @@ object HealthPanelHud {
     private const val MARGIN = 2
     private const val PADDING = 2
     private const val BAR_HEIGHT = 12 // 血条高度（像素），调小更显精致协调
+    private const val FRAME_SIZE = PANEL_HEIGHT - PADDING * 3   //  放3D生物模型的容器的大小
 
     // —— 心形血条（复用 HeartLayout 布局；走 GUI 图集 sprite） ——
     private const val HEART_SIZE = 9 // 单颗心贴图边长（像素，原版尺寸）
@@ -61,7 +54,7 @@ object HealthPanelHud {
     private const val EFFECT_GAP = 1         // 相邻背板横向间隙
     private const val EFFECT_STEP = EFFECT_BG_SIZE + EFFECT_GAP
 
-    // 效果背板 sprite（与原版 HUD 同款）：普通 / ambient（信标等环境效果）两种。
+    // 药水效果的背景容器 sprite（与原版 HUD 同款）：普通 / ambient（信标等环境效果）两种。
     private val EFFECT_BG_SPRITE = Identifier.withDefaultNamespace("hud/effect_background")
     private val EFFECT_BG_AMBIENT_SPRITE = Identifier.withDefaultNamespace("hud/effect_background_ambient")
 
@@ -177,9 +170,8 @@ object HealthPanelHud {
 
                 val font = minecraft.font
                 val bold = config.panelTextBold
-                val frameSize = PANEL_HEIGHT - PADDING * 2
                 // 文本区左沿相对面板左沿的偏移：内边距 + 模型框 + 间隙。
-                val contentLeft = PADDING + frameSize + 6
+                val contentLeft = PADDING + FRAME_SIZE + 6
                 // 面板宽度随名字完整宽度在「默认~最大」间自适应；超出最大宽度的名字会被省略。
                 val fullNameWidth =
                     font.width(if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName)
@@ -211,10 +203,10 @@ object HealthPanelHud {
                 drawPanelBackground(graphics, theme, panelX, panelY, panelX + panelWidth, panelY + PANEL_HEIGHT)
 
                 // 模型视口：左侧正方形区域，按形状绘制边框，并返回模型可绘制的内框。
-                val frameX0 = panelX + PADDING
-                val frameY0 = panelY + PADDING
-                val frameX1 = frameX0 + frameSize
-                val frameY1 = frameY0 + frameSize
+                val frameX0 = panelX + (PANEL_HEIGHT - FRAME_SIZE) / 2
+                val frameY0 = panelY + (PANEL_HEIGHT - FRAME_SIZE) / 2
+                val frameX1 = frameX0 + FRAME_SIZE
+                val frameY1 = frameY0 + FRAME_SIZE
 
                 val inner = drawModelFrame(graphics, theme, config.panelFrameShape, frameX0, frameY0, frameX1, frameY1)
                 if (config.panelShowModel) {
