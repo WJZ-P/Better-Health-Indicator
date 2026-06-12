@@ -25,8 +25,6 @@ import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.min
-import kotlin.math.sqrt
-
 /**
  * 屏幕角落血量面板：框 + 关注生物的实时 3D 模型 + 名字与血量信息。
  *
@@ -58,21 +56,14 @@ object HealthPanelHud {
     private val EFFECT_BG_SPRITE = Identifier.withDefaultNamespace("hud/effect_background")
     private val EFFECT_BG_AMBIENT_SPRITE = Identifier.withDefaultNamespace("hud/effect_background_ambient")
 
-    // 圆形视口边框粗细（像素）；各处配色统一见 [Theme]（深/浅两套主题）。
-    private const val FRAME_BORDER_THICKNESS = 1
-
-    // 原版hud资产: gamemode_switcher/slot 这个是F3+F4 面板里面的未选中态,四角带缺口,gamemode_switcher/selection是选中态，金色的
-    // hud/hotbar_selection是快捷栏选中态
-
-    // private val SLOT_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
-    // private val SELECTION_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/selection")
-    // private const val SLOT_NATIVE_SIZE = 26.0f
-    // private const val SLOT_NATIVE_BORDER = 2.0f // 贴图斜角边框占用的像素，用于按比例内缩模型框
-
-    // 左上角面板HUD用F3+F4的面板的未选中态来做
-    private val HOTBAR_SELECTION_SPRITE = Identifier.fromNamespaceAndPath("minecraft", "gamemode_switcher/slot")
-    private const val HOTBAR_SELECTION_NATIVE_SIZE = 22.0f
-    private const val HOTBAR_SELECTION_NATIVE_BORDER = 2.0f // 选中框白边占用像素，用于按比例内缩模型框
+    // 自定义模型框贴图（手绘）：放在 assets/better_health_indicator/textures/gui/sprites/frame/ 下，走 GUI 图集。
+    private val FRAME_SQUARE_SPRITE = Identifier.fromNamespaceAndPath("better_health_indicator", "frame/square")
+    private val FRAME_ROUND_SPRITE = Identifier.fromNamespaceAndPath("better_health_indicator", "frame/round")
+    private const val FRAME_NATIVE_SIZE = 26.0f // 贴图画布尺寸（手绘为 26×26）
+    private const val FRAME_NATIVE_BORDER = 2.0f // 方形贴图边框占用像素，用于按比例内缩模型框（按手绘边框粗细微调）
+    // 圆形框内模型占「内半径」的比例：圆形能容纳更大模型，故独立于方形单独控制。
+    // 1.0 ≈ 模型贴到圆周（最大）；约 0.707 等价于严格内切正方形（最保守）；介于两者间可在“更大”与“不越界”间取舍。
+    private const val CIRCLE_MODEL_FILL = 0.9f
     private const val GLOSS_CELL = 2 // 棋盘格高光单元边长（像素），2x2 颗粒
 
     // —— 血条前景按血量三档着色（荧光亮色填充，与主题无关）——
@@ -144,7 +135,6 @@ object HealthPanelHud {
         barGloss = 0x10FFFFFF.toInt(),
     )
     private const val MODEL_PITCH = -15.0f  //  3D模型的俯视角
-    private const val SQRT2 = 1.41421356f
 
     // 模型在渲染框中占用的比例（留少量边距，避免模型网格略超碰撞箱时贴边）。
     private const val MODEL_FILL_RATIO = 0.8f
@@ -487,64 +477,30 @@ object HealthPanelHud {
         x1: Int,
         y1: Int,
     ): IntArray {
-        val t = FRAME_BORDER_THICKNESS
+        val size = x1 - x0
+        // 贴图边框占用像素（按手绘边框比例换算到当前绘制尺寸）。
+        val borderPx = (size * FRAME_NATIVE_BORDER / FRAME_NATIVE_SIZE).toInt().coerceAtLeast(1)
         return when (shape) {
-            //  这里是方形的框框
+            //  方形框：直接绘制手绘贴图 better_health_indicator:frame/square
             PanelFrameShape.SQUARE -> {
-                val size = x1 - x0
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, HOTBAR_SELECTION_SPRITE, x0, y0, size, y1 - y0)
-                // 模型框按贴图白边比例内缩，避免模型压到边框。
-                val inset = (size * HOTBAR_SELECTION_NATIVE_BORDER / HOTBAR_SELECTION_NATIVE_SIZE).toInt().coerceAtLeast(2)
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FRAME_SQUARE_SPRITE, x0, y0, size, y1 - y0)
+                // 模型框按贴图边框比例内缩，避免模型压到边框。
+                val inset = borderPx.coerceAtLeast(2)
                 intArrayOf(x0 + inset, y0 + inset, x1 - inset, y1 - inset)
             }
 
+            //  圆形框：直接绘制手绘贴图 better_health_indicator:frame/round
             PanelFrameShape.CIRCLE -> {
-                val radius = (x1 - x0) / 2
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FRAME_ROUND_SPRITE, x0, y0, size, y1 - y0)
+                val radius = size / 2
                 val cx = x0 + radius
                 val cy = y0 + radius
-                fillDisk(graphics, cx, cy, radius, theme.frameBorder)
-                fillDiskGradient(graphics, cx, cy, radius - t, theme.frameBgTop, theme.frameBgBottom)
-                // 内切正方形：半边长 = (半径 - 边框) / √2，模型限制其中即不会越出圆周。
-                val half = ((radius - t) / SQRT2).toInt()
+                // 圆形可容纳更大模型：模型半边长按内半径 × CIRCLE_MODEL_FILL，独立于方形内缩。
+                val half = ((radius - borderPx) * CIRCLE_MODEL_FILL).toInt()
                 intArrayOf(cx - half, cy - half, cx + half, cy + half)
             }
         }
     }
-
-    /** 扫描线填充实心圆盘（每行一条 1px 高的水平条）。 */
-    private fun fillDisk(graphics: GuiGraphicsExtractor, cx: Int, cy: Int, r: Int, color: Int) {
-        var dy = -r
-        while (dy <= r) {
-            val halfWidth = sqrt((r * r - dy * dy).toFloat()).toInt()
-            graphics.fill(cx - halfWidth, cy + dy, cx + halfWidth, cy + dy + 1, color)
-            dy++
-        }
-    }
-
-    /** 扫描线填充竖向渐变圆盘。 */
-    private fun fillDiskGradient(graphics: GuiGraphicsExtractor, cx: Int, cy: Int, r: Int, top: Int, bottom: Int) {
-        if (r <= 0) return
-        var dy = -r
-        while (dy <= r) {
-            val halfWidth = sqrt((r * r - dy * dy).toFloat()).toInt()
-            val color = lerpColor(top, bottom, (dy + r).toFloat() / (2 * r))
-            graphics.fill(cx - halfWidth, cy + dy, cx + halfWidth, cy + dy + 1, color)
-            dy++
-        }
-    }
-
-    /** 按比例 t∈[0,1] 在两个 ARGB 颜色间线性插值。 */
-    private fun lerpColor(from: Int, to: Int, t: Float): Int {
-        val s = t.coerceIn(0.0f, 1.0f)
-        val a = lerpChannel(from ushr 24, to ushr 24, s)
-        val r = lerpChannel((from ushr 16) and 0xFF, (to ushr 16) and 0xFF, s)
-        val g = lerpChannel((from ushr 8) and 0xFF, (to ushr 8) and 0xFF, s)
-        val b = lerpChannel(from and 0xFF, to and 0xFF, s)
-        return (a shl 24) or (r shl 16) or (g shl 8) or b
-    }
-
-    private fun lerpChannel(from: Int, to: Int, t: Float): Int =
-        (from + (to - from) * t).toInt().coerceIn(0, 255)
 
     /** 面板背景：半透明深色底（竖向渐变）+ 最外深色描边 + 内一圈外凸 bevel，营造原版风格立体质感。 */
     private fun drawPanelBackground(graphics: GuiGraphicsExtractor, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
