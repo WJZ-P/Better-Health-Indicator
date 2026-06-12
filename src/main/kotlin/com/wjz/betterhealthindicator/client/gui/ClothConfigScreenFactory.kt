@@ -73,17 +73,6 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.hideVanillaDamageParticles = it }
                 .build(),
         )
-        // 多重血条「上层」配色：最底层(第 1 排)恒为原版红心，第 2 排起依次取以下颜色，超出循环。
-        // 由灰度模板运行时染色生成，主体=该色、边缘略暗、高光略亮；头顶与面板共用。
-        for (index in config.tierColors.indices) {
-            global.addEntry(
-                entry.startColorField(Component.literal("多重血条颜色 ${index + 2}"), config.tierColors[index])
-                    .setDefaultValue(Defaults.TIER_COLORS[index % Defaults.TIER_COLORS.size])
-                    .setTooltip(Component.literal("第 ${index + 2} 排血条的主颜色（多重血条时生效）"))
-                    .setSaveConsumer { config.tierColors[index] = it }
-                    .build(),
-            )
-        }
 
         val head = builder.getOrCreateCategory(Component.literal("头顶血条"))
 
@@ -111,6 +100,15 @@ object ClothConfigScreenFactory {
                 .setDefaultValue(Defaults.HEAD_HEART_HIT_EFFECT)
                 .setTooltip(Component.literal("心形血条受击/回血时：心容器外圈闪白高亮 + 整颗心散开晃动倾斜"))
                 .setSaveConsumer { config.headHeartHitEffect = it }
+                .build(),
+        )
+        head.addEntry(
+            entry.startDoubleField(Component.literal("残血抖动阈值（血量比例）"), config.lowHealthShakeThreshold)
+                .setMin(0.0)
+                .setMax(1.0)
+                .setDefaultValue(Defaults.LOW_HEALTH_SHAKE_THRESHOLD)
+                .setTooltip(Component.literal("血量 ≤ 此比例时，整排爱心容器会颤抖；头顶与面板同时生效，0 为关闭"))
+                .setSaveConsumer { config.lowHealthShakeThreshold = it }
                 .build(),
         )
         head.addEntry(
@@ -213,6 +211,18 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.containerShatterEnabled = it }
                 .build(),
         )
+        // 多重血条「上层」配色：最底层(第 1 排)恒为原版红心，第 2 排起依次取以下颜色，超出循环。
+        // 由灰度模板运行时染色生成，主体=该色、边缘略暗、高光略亮；头顶与面板共用。
+        for (index in config.tierColors.indices) {
+            head.addEntry(
+                entry.startColorField(Component.literal("多重血条颜色 ${index + 2}"), config.tierColors[index])
+                    .setDefaultValue(Defaults.TIER_COLORS[index % Defaults.TIER_COLORS.size])
+                    .setTooltip(Component.literal("第 ${index + 2} 排血条的主颜色（多重血条时生效）"))
+                    .setSaveConsumer { config.tierColors[index] = it }
+                    .build(),
+            )
+        }
+
         val panel = builder.getOrCreateCategory(Component.literal("屏幕面板"))
         panel.addEntry(
             entry.startBooleanToggle(Component.literal("启用屏幕面板"), config.panelEnabled)

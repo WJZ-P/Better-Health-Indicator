@@ -216,7 +216,7 @@ object HealthPanelHud {
                 if (heartsView != null) {
                     // 心形血条：血量变化时心容器外圈闪白（受击/回血反馈，可配置关闭）。
                     val blinking = config.panelHeartHighlight && HeartBlinkTracker.update(target.id, target.health)
-                    drawHearts(graphics, font, barX0, (barY0 + barY1) / 2, heartsView, blinking, !config.drainFromRight)
+                    drawHearts(graphics, font, barX0, (barY0 + barY1) / 2, heartsView, blinking, !config.drainFromRight, target.id, target.health, target.maxHealth, config)
                 } else {
                     // 纯色血条：凹槽 + 描边 + 随血量红→黄→绿渐变前景 + 顶部高光，血量数值居中叠加其上。
                     val healthRatio = (target.health / target.maxHealth).coerceIn(0.0f, 1.0f)
@@ -364,6 +364,10 @@ object HealthPanelHud {
         view: HeartLayout.View,
         blinking: Boolean,
         mirrorHalf: Boolean,
+        entityId: Int,
+        health: Float,
+        maxHealth: Float,
+        config: com.wjz.betterhealthindicator.config.HealthIndicatorConfig,
     ) {
         val top = centerY - HEART_SIZE / 2
         val container = HeartGraphics.guiContainer(view.containerHardcore, blinking)
@@ -372,24 +376,26 @@ object HealthPanelHud {
         val ordered = view.slots.sortedByDescending { it.cx }
         ordered.forEachIndexed { i, slot ->
             val x = x0 + i * HEART_STEP
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, container, x, top, HEART_SIZE, HEART_SIZE)
+            // 残血濒死：每颗心独立、相邻反相的垂直抖动（与头顶共用逻辑）。
+            val topY = top + LowHealthShake.verticalOffset(entityId, i, health, maxHealth, config).toInt()
+            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, container, x, topY, HEART_SIZE, HEART_SIZE)
             // 分层时空出的顶层揭示下一层满心作底，而非黑底；底层是否极限模式独立于顶层。
             slot.baseTier?.let {
-                drawGuiHeart(graphics, it.guiFullFor(view.baseHardcore), x, top)
+                drawGuiHeart(graphics, it.guiFullFor(view.baseHardcore), x, topY)
             }
             when (slot.top) {
                 HeartLayout.Top.FULL ->
-                    drawGuiHeart(graphics, slot.topTier.guiFullFor(view.topHardcore), x, top)
+                    drawGuiHeart(graphics, slot.topTier.guiFullFor(view.topHardcore), x, topY)
                 // 半心填充侧跟随掉血方向：从右往左扣→左半（原版默认 sprite）；从左往右扣→水平镜像成右半。
                 HeartLayout.Top.HALF -> if (mirrorHalf) {
                     val pose = graphics.pose()
                     pose.pushMatrix()
                     pose.translate((2 * x + HEART_SIZE).toFloat(), 0.0f)
                     pose.scale(-1.0f, 1.0f)
-                    drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, top)
+                    drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, topY)
                     pose.popMatrix()
                 } else {
-                    drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, top)
+                    drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, topY)
                 }
                 HeartLayout.Top.NONE -> {}
             }

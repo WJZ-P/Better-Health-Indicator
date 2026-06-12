@@ -618,8 +618,10 @@ object EntityHealthBarRenderer {
         view.slots.forEachIndexed { index, slot ->
             // 受击散开：整颗心（container 背板 + 彩色层）按随机方向飞出/飞回，并整体绕中心偏转一定角度。
             val scatter = HeartScatterTracker.offset(entityId, index)
+            // 残血濒死：每颗心独立、相邻反相的垂直抖动（抖几下歇一会儿）。
+            val lowHealthShake = LowHealthShake.verticalOffset(entityId, index, health, maxHealth, config)
             val cx = slot.cx + scatter[0]
-            val cy = scatter[1]
+            val cy = scatter[1] + lowHealthShake
             val rot = scatter[2]
             add(containerLayer, containerTexture, cx, cy, rot, false)
             for (q in topHeartQuads(slot, fillFlip, view.topHardcore, view.baseHardcore)) add(heartLayer, q.texture, cx, cy, rot, q.flipU)
