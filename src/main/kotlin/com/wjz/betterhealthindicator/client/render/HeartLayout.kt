@@ -137,7 +137,7 @@ object HeartLayout {
 
         val slots = buildSlots(heartCount, config.drainFromRight) { logical ->
             val top = fillFor(health - logical * hpPerHeart, hpPerHeart)
-            Triple(top, HeartGraphics.HeartTier.RED, null)
+            Triple(top, HeartGraphics.VanillaHeartTier, null)
         }
         return View(slots, 0)
     }
@@ -159,7 +159,7 @@ object HeartLayout {
         val heartCount = flatHeartCount(maxHealth, config)
         val hpPer = maxHealth / heartCount
         val logical = floor(hp / hpPer).toInt().coerceIn(0, heartCount - 1)
-        return HeartRef(cxFor(logical, heartCount, config.drainFromRight), HeartGraphics.HeartTier.RED)
+        return HeartRef(cxFor(logical, heartCount, config.drainFromRight), HeartGraphics.VanillaHeartTier)
     }
 
     /** 顶层填充状态判定（也用于粒子的整/半判定）。 */

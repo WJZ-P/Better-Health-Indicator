@@ -55,53 +55,76 @@ object HeartGraphics {
     }
 
     /**
-     * 分层爱心颜色，全部取自原版自带的异色心形精灵（无需染色/额外资源）。
-     * 顺序即叠层顺序：每满一排(20HP)进入下一层颜色，超出后循环并以 xN 文字标注。
+     * 2D 面板上一颗心要用的贴图来源：原版心走 GUI 图集（[Sprite] → blitSprite），
+     * 染色心是运行时生成的独立 [DynamicTexture]（[Texture] → blit，非图集）。
      */
-    enum class HeartTier(fullName: String, halfName: String) {
-        RED("full", "half"),
-        GOLD("absorbing_full", "absorbing_half"),
-        GREEN("poisoned_full", "poisoned_half"),
-        BLUE("frozen_full", "frozen_half"),
-        DARK("withered_full", "withered_half"),
-        ;
+    sealed interface GuiHeart {
+        /** GUI 图集精灵（原版心），用 blitSprite 绘制。 */
+        class Sprite(val sprite: Identifier) : GuiHeart
 
-        val full: Identifier = heartSprite(fullName)
-        val half: Identifier = heartSprite(halfName)
+        /** 独立贴图（染色心），用 blit 绘制；[size] 为贴图原始像素边长。 */
+        class Texture(val texture: Identifier, val size: Int) : GuiHeart
+    }
 
-        // 极限（hardcore）模式贴图：原版在 full/half 前插入 "hardcore_"（如 absorbing_hardcore_full）。
-        private val hardcoreFullName = fullName.replace("full", "hardcore_full")
-        private val hardcoreHalfName = halfName.replace("half", "hardcore_half")
-        val hardcoreFull: Identifier = heartSprite(hardcoreFullName)
-        val hardcoreHalf: Identifier = heartSprite(hardcoreHalfName)
+    /**
+     * 一层爱心的贴图来源。
+     * - [VanillaHeartTier]：最底层(layer 0)与单层模式用的原版红心（含极限 hardcore 变体）；
+     * - [TintedHeartTier]：多重血条上层，按主色由灰度模板运行时染色而成。
+     */
+    sealed interface HeartTier {
+        /** 满心（世界 sprite，头顶 3D 用）。 */
+        fun fullFor(hardcore: Boolean): Identifier
 
-        // GUI 图集版（供 2D 面板心形血条用）。
-        val guiFull: Identifier = Identifier.withDefaultNamespace("hud/heart/$fullName")
-        val guiHalf: Identifier = Identifier.withDefaultNamespace("hud/heart/$halfName")
-        val guiHardcoreFull: Identifier = Identifier.withDefaultNamespace("hud/heart/$hardcoreFullName")
-        val guiHardcoreHalf: Identifier = Identifier.withDefaultNamespace("hud/heart/$hardcoreHalfName")
+        /** 半心（世界 sprite，头顶 3D 用）。 */
+        fun halfFor(hardcore: Boolean): Identifier
 
-        /** 按是否极限模式选择满/半心贴图（世界 sprite，头顶 3D 用）。 */
-        fun fullFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreFull else full
-        fun halfFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreHalf else half
+        /** 满心（2D 面板用）。 */
+        fun guiFullFor(hardcore: Boolean): GuiHeart
 
-        /** 按是否极限模式选择满/半心贴图（GUI 图集，2D 面板用）。 */
-        fun guiFullFor(hardcore: Boolean): Identifier = if (hardcore) guiHardcoreFull else guiFull
-        fun guiHalfFor(hardcore: Boolean): Identifier = if (hardcore) guiHardcoreHalf else guiHalf
+        /** 半心（2D 面板用）。 */
+        fun guiHalfFor(hardcore: Boolean): GuiHeart
 
         companion object {
-            /** 按叠层索引取颜色，超出调色板则循环。 */
+            /**
+             * 按绝对叠层索引取该层贴图来源：layer 0（最底层/最后一排）恒为原版红心；
+             * layer >= 1（多重血条上层）按配置调色板循环取色，由灰度模板染色生成。
+             */
             fun byLayer(layer: Int): HeartTier {
-                val values = entries
-                return values[((layer % values.size) + values.size) % values.size]
+                if (layer <= 0) return VanillaHeartTier
+                val palette = com.wjz.betterhealthindicator.config.ConfigManager.config.tierColors
+                if (palette.isEmpty()) return VanillaHeartTier
+                return TintedHeartTier(palette[(layer - 1) % palette.size])
             }
         }
     }
 
-    /** 所有半心贴图集合，用于判断是否需要按掉血方向翻转 U（决定填充哪半边）。 */
-    private val HALF_TEXTURES: Set<Identifier> = HeartTier.entries.map { it.half }.toSet()
+    /** 原版红心（含极限 hardcore 变体）：仅最底层(layer 0)与非分层/单层模式使用。 */
+    object VanillaHeartTier : HeartTier {
+        private val full = heartSprite("full")
+        private val half = heartSprite("half")
+        private val hardcoreFull = heartSprite("hardcore_full")
+        private val hardcoreHalf = heartSprite("hardcore_half")
+        private val guiFull = Identifier.withDefaultNamespace("hud/heart/full")
+        private val guiHalf = Identifier.withDefaultNamespace("hud/heart/half")
+        private val guiHardcoreFull = Identifier.withDefaultNamespace("hud/heart/hardcore_full")
+        private val guiHardcoreHalf = Identifier.withDefaultNamespace("hud/heart/hardcore_half")
 
-    fun isHalfTexture(texture: Identifier): Boolean = texture in HALF_TEXTURES
+        override fun fullFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreFull else full
+        override fun halfFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreHalf else half
+        override fun guiFullFor(hardcore: Boolean): GuiHeart = GuiHeart.Sprite(if (hardcore) guiHardcoreFull else guiFull)
+        override fun guiHalfFor(hardcore: Boolean): GuiHeart = GuiHeart.Sprite(if (hardcore) guiHardcoreHalf else guiHalf)
+    }
+
+    /**
+     * 多重血条上层染色心：贴图按主色由灰度模板运行时烘焙（见 [TintedHeartTextures]）。
+     * 染色心不参与极限模式（hardcore 仅作用于最底层原版心），故 hardcore 参数被忽略。
+     */
+    class TintedHeartTier(private val colorRgb: Int) : HeartTier {
+        override fun fullFor(hardcore: Boolean): Identifier = TintedHeartTextures.fullTexture(colorRgb)
+        override fun halfFor(hardcore: Boolean): Identifier = TintedHeartTextures.halfTexture(colorRgb)
+        override fun guiFullFor(hardcore: Boolean): GuiHeart = GuiHeart.Texture(TintedHeartTextures.fullTexture(colorRgb), SIZE.toInt())
+        override fun guiHalfFor(hardcore: Boolean): GuiHeart = GuiHeart.Texture(TintedHeartTextures.halfTexture(colorRgb), SIZE.toInt())
+    }
 
     /**
      * 绘制一个带颜色（含透明度）的贴图四边形（单面，因永远朝向玩家）。

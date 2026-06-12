@@ -375,21 +375,21 @@ object HealthPanelHud {
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, container, x, top, HEART_SIZE, HEART_SIZE)
             // 分层时空出的顶层揭示下一层满心作底，而非黑底；底层是否极限模式独立于顶层。
             slot.baseTier?.let {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, it.guiFullFor(view.baseHardcore), x, top, HEART_SIZE, HEART_SIZE)
+                drawGuiHeart(graphics, it.guiFullFor(view.baseHardcore), x, top)
             }
             when (slot.top) {
                 HeartLayout.Top.FULL ->
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiFullFor(view.topHardcore), x, top, HEART_SIZE, HEART_SIZE)
+                    drawGuiHeart(graphics, slot.topTier.guiFullFor(view.topHardcore), x, top)
                 // 半心填充侧跟随掉血方向：从右往左扣→左半（原版默认 sprite）；从左往右扣→水平镜像成右半。
                 HeartLayout.Top.HALF -> if (mirrorHalf) {
                     val pose = graphics.pose()
                     pose.pushMatrix()
                     pose.translate((2 * x + HEART_SIZE).toFloat(), 0.0f)
                     pose.scale(-1.0f, 1.0f)
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalfFor(view.topHardcore), x, top, HEART_SIZE, HEART_SIZE)
+                    drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, top)
                     pose.popMatrix()
                 } else {
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalfFor(view.topHardcore), x, top, HEART_SIZE, HEART_SIZE)
+                    drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, top)
                 }
                 HeartLayout.Top.NONE -> {}
             }
@@ -402,6 +402,26 @@ object HealthPanelHud {
         }
     }
 
+    /** 绘制一颗心：原版心走 GUI 图集 blitSprite，染色心走独立贴图 blit。 */
+    private fun drawGuiHeart(graphics: GuiGraphicsExtractor, heart: HeartGraphics.GuiHeart, x: Int, top: Int) {
+        when (heart) {
+            is HeartGraphics.GuiHeart.Sprite ->
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, heart.sprite, x, top, HEART_SIZE, HEART_SIZE)
+            is HeartGraphics.GuiHeart.Texture ->
+                graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    heart.texture,
+                    x,
+                    top,
+                    0.0f,
+                    0.0f,
+                    HEART_SIZE,
+                    HEART_SIZE,
+                    heart.size,
+                    heart.size,
+                )
+        }
+    }
 
     private fun renderEntityModel(
         graphics: GuiGraphicsExtractor,

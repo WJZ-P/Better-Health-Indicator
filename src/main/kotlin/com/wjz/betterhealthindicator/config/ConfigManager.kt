@@ -36,6 +36,18 @@ object ConfigManager {
             BetterHealthIndicatorLogger.error("Failed to load config, falling back to defaults.", e)
             HealthIndicatorConfig()
         }
+        normalize(config)
+    }
+
+    /**
+     * 反序列化兜底：GSON 走 Unsafe 实例化、绕过 Kotlin 字段初始化器，旧配置文件缺失新增字段时会留为 null。
+     * 这里补齐可空集合型字段，避免后续访问空指针。
+     */
+    private fun normalize(value: HealthIndicatorConfig) {
+        @Suppress("SENSELESS_COMPARISON")
+        if (value.tierColors == null || value.tierColors.isEmpty()) {
+            value.tierColors = HealthIndicatorConfig.Defaults.TIER_COLORS.toMutableList()
+        }
     }
 
     fun save() {

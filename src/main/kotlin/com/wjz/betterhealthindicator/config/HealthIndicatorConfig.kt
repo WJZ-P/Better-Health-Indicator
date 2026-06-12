@@ -125,6 +125,10 @@ class HealthIndicatorConfig {
     // 生物死亡时心形容器（背板）的抖动+逐颗连锁碎裂特效；较酷炫，可关闭以免喧宾夺主。
     var containerShatterEnabled: Boolean = Defaults.CONTAINER_SHATTER_ENABLED
 
+    // 多重血条「上层」爱心配色（RGB，0xRRGGBB）：最底层(第1排)恒为原版红心，第 2/3/4… 排依次取此列表，超出循环。
+    // 由灰度模板运行时染色生成：主体=该色，边缘略暗，高光略亮（独立于原版色心）。
+    var tierColors: MutableList<Int> = Defaults.TIER_COLORS.toMutableList()
+
     // 屏幕面板
     var panelEnabled: Boolean = Defaults.PANEL_ENABLED
     var panelCorner: PanelCorner = Defaults.PANEL_CORNER
@@ -184,6 +188,20 @@ class HealthIndicatorConfig {
         const val PARTICLE_MEDIUM_DAMAGE: Double = 7.0
         const val PARTICLE_HEAVY_DAMAGE: Double = 10.0
         const val CONTAINER_SHATTER_ENABLED: Boolean = true
+
+        // 多重血条上层配色默认渐变（第 2 排起依次：橙→金→绿→青→蓝→紫→品红→白→黑→红），超出循环。
+        val TIER_COLORS: List<Int> = listOf(
+            0xFF6B00, // 第2排：橘红 (完美衔接底板的红色)
+            0xFFA600, // 第3排：亮橙
+            0xFFD900, // 第4排：金黄
+            0xBBE300, // 第5排：黄绿
+            0x5CE62E, // 第6排：草绿
+            0x00E68A, // 第7排：青绿
+            0x00D5FF, // 第8排：天蓝
+            0x3385FF, // 第9排：海蓝
+            0x8F4DFF, // 第10排：魅紫
+            0xFF33B5, // 第11排：粉紫/品红 (色相环闭环前夕)
+        )
 
         const val PANEL_ENABLED: Boolean = true
         val PANEL_CORNER: PanelCorner = PanelCorner.TOP_LEFT

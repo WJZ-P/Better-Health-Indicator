@@ -8,6 +8,7 @@ import com.wjz.betterhealthindicator.config.PanelBarStyle
 import com.wjz.betterhealthindicator.config.PanelCorner
 import com.wjz.betterhealthindicator.config.PanelFrameShape
 import com.wjz.betterhealthindicator.config.PanelTheme
+import com.wjz.betterhealthindicator.client.render.TintedHeartTextures
 import me.shedaniel.clothconfig2.api.ConfigBuilder
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
@@ -21,7 +22,11 @@ object ClothConfigScreenFactory {
         val builder = ConfigBuilder.create()
             .setParentScreen(parent)
             .setTitle(Component.literal("Better Health Indicator"))
-            .setSavingRunnable { ConfigManager.save() }
+            .setSavingRunnable {
+                ConfigManager.save()
+                // 配色可能变了：丢弃旧染色贴图，下次渲染按新色重新烘焙。
+                TintedHeartTextures.reset()
+            }
         val entry = builder.entryBuilder()
 
         val global = builder.getOrCreateCategory(Component.literal("全局"))
@@ -68,6 +73,17 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.hideVanillaDamageParticles = it }
                 .build(),
         )
+        // 多重血条「上层」配色：最底层(第 1 排)恒为原版红心，第 2 排起依次取以下颜色，超出循环。
+        // 由灰度模板运行时染色生成，主体=该色、边缘略暗、高光略亮；头顶与面板共用。
+        for (index in config.tierColors.indices) {
+            global.addEntry(
+                entry.startColorField(Component.literal("多重血条颜色 ${index + 2}"), config.tierColors[index])
+                    .setDefaultValue(Defaults.TIER_COLORS[index % Defaults.TIER_COLORS.size])
+                    .setTooltip(Component.literal("第 ${index + 2} 排血条的主颜色（多重血条时生效）"))
+                    .setSaveConsumer { config.tierColors[index] = it }
+                    .build(),
+            )
+        }
 
         val head = builder.getOrCreateCategory(Component.literal("头顶血条"))
 
@@ -197,7 +213,6 @@ object ClothConfigScreenFactory {
                 .setSaveConsumer { config.containerShatterEnabled = it }
                 .build(),
         )
-
         val panel = builder.getOrCreateCategory(Component.literal("屏幕面板"))
         panel.addEntry(
             entry.startBooleanToggle(Component.literal("启用屏幕面板"), config.panelEnabled)
