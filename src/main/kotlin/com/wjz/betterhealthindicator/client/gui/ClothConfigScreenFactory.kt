@@ -96,6 +96,13 @@ object ClothConfigScreenFactory {
                 .build(),
         )
         head.addEntry(
+            entry.startBooleanToggle(Component.literal("详情显示在血条右侧"), config.detailBesideBar)
+                .setDefaultValue(Defaults.DETAIL_BESIDE_BAR)
+                .setTooltip(Component.literal("开启：血量条数(x N)/血量数值贴在爱心血条右侧（爱心仍居中）；关闭：用「|」接在名字行尾"))
+                .setSaveConsumer { config.detailBesideBar = it }
+                .build(),
+        )
+        head.addEntry(
             entry.startBooleanToggle(Component.literal("受击反馈特效"), config.headHeartHitEffect)
                 .setDefaultValue(Defaults.HEAD_HEART_HIT_EFFECT)
                 .setTooltip(Component.literal("心形血条受击/回血时：心容器外圈闪白高亮 + 整颗心散开晃动倾斜"))

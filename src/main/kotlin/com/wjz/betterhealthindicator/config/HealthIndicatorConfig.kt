@@ -94,6 +94,8 @@ class HealthIndicatorConfig {
     var relativeHeartCount: Int = Defaults.RELATIVE_HEART_COUNT
     var showName: Boolean = Defaults.SHOW_NAME
     var showHealthText: Boolean = Defaults.SHOW_HEALTH_TEXT
+    // 详情（血量条数 x N / 血量数值 18/20）的位置：true=放在爱心血条右侧（爱心仍居中）；false=用「|」接在名字行。
+    var detailBesideBar: Boolean = Defaults.DETAIL_BESIDE_BAR
     // 头顶心形血条受击反馈（白光高亮 + 整颗心散开晃动）统一开关；默认开启。
     var headHeartHitEffect: Boolean = Defaults.HEAD_HEART_HIT_EFFECT
     // 残血高频抖动阈值（占最大血量的比例）：血量 ≤ 此比例时，整排爱心容器高频垂直抖动（还原原版濒死反馈）。
@@ -170,6 +172,7 @@ class HealthIndicatorConfig {
         const val RELATIVE_HEART_COUNT: Int = 10
         const val SHOW_NAME: Boolean = true
         const val SHOW_HEALTH_TEXT: Boolean = false
+        const val DETAIL_BESIDE_BAR: Boolean = true
         const val HEAD_HEART_HIT_EFFECT: Boolean = true
         const val LOW_HEALTH_SHAKE_THRESHOLD: Double = 0.20
         const val HIDE_VANILLA_NAME_TAG: Boolean = true

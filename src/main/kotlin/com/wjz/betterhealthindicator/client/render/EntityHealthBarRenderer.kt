@@ -47,6 +47,8 @@ object EntityHealthBarRenderer {
 
     // 名字行末尾「x倍数」相对名字字号的缩放系数；<1 即比名字更小，调小这里可让倍数更不抢眼。
     private const val MULTIPLIER_SCALE = 0.75f
+    // 详情贴在血条右侧时，与血条右边缘的水平间距（billboard 局部单位 ≈ 像素）。
+    private const val DETAIL_BAR_GAP = 2.0f
     // —— 文本配色（统一在此调整）——
     // 名字与血量之间的分隔符 / 斜杠颜色（中性灰）。
     private const val SEPARATOR_COLOR = 0xAAAAAA
@@ -451,33 +453,54 @@ object EntityHealthBarRenderer {
         // - 关闭血量数值：多倍血条（>=2 排）生物在该位置改显「x倍数」（按倍数分档着色）。
         val showHp = config.showHealthText || config.barStyle == BarStyle.NUMERIC
         val showMult = !showHp && heartMultiplier >= 2
+        // 详情（血量数值 / x倍数）可选放到血条右侧：数值样式无血条几何，仍并入名字行。
+        val detailBesideBar = config.detailBesideBar && config.barStyle != BarStyle.NUMERIC
+
+        // 构造详情文本片段（hp 或 x倍数），供名字行或血条右侧复用。
+        val detailSegment: TextSegment? = when {
+            showHp -> TextSegment(healthComponent(entity, healthRatio, config), NAME_TAG_SCALE * config.healthTextScale.toFloat())
+            showMult -> TextSegment(
+                styled(Component.literal("x $heartMultiplier").withColor(HeartLayout.multiplierColor(heartMultiplier)), config),
+                nameScale * MULTIPLIER_SCALE,
+            )
+            else -> null
+        }
+
         val segments = ArrayList<TextSegment>(3)
         if (config.showName) {
             val nameComp: Component =
                 if (config.textBold) entity.displayName.copy().withStyle(ChatFormatting.BOLD) else entity.displayName
             segments.add(TextSegment(nameComp, nameScale))
         }
-        if (showHp) {
+        // 未启用「血条右侧」时，详情用彩色「|」接在名字行尾部（原行为）。
+        if (!detailBesideBar && detailSegment != null) {
             if (config.showName) {
                 segments.add(TextSegment(styled(Component.literal(" | ").withColor(SEPARATOR_COLOR), config), nameScale))
             }
-            val hpScale = NAME_TAG_SCALE * config.healthTextScale.toFloat()
-            segments.add(TextSegment(healthComponent(entity, healthRatio, config), hpScale))
-        } else if (showMult) {
-            if (config.showName) {
-                segments.add(TextSegment(styled(Component.literal(" | ").withColor(SEPARATOR_COLOR), config), nameScale))
-            }
-            val multComp = styled(
-                Component.literal("x $heartMultiplier").withColor(HeartLayout.multiplierColor(heartMultiplier)),
-                config,
-            )
-            segments.add(TextSegment(multComp, nameScale * MULTIPLIER_SCALE))
+            segments.add(detailSegment)
         }
         if (segments.isNotEmpty()) {
             // 数值样式无血条几何，文本落在血条基准高度；其余样式落在血条上方。
             val labelY = if (config.barStyle == BarStyle.NUMERIC) barHeight else barHeight + LINE_GAP * 2.5
             submitTextLine(collector, poseStack, base, labelY, segments, config, cameraState)
         }
+        // 「血条右侧」详情：与血条同高，左对齐贴在血条右边缘外（爱心/血条本身仍居中）。
+        if (detailBesideBar && detailSegment != null) {
+            val barRightLocal = barRightLocalEdge(entity, config)
+            val leftR = config.scale * (barRightLocal + DETAIL_BAR_GAP)
+            submitTextLine(collector, poseStack, base, barHeight, listOf(detailSegment), config, cameraState, anchorLeftR = leftR)
+        }
+    }
+
+    /** 血条右边缘的 billboard 局部 X 半宽（用于把详情文本贴到血条右侧）。 */
+    private fun barRightLocalEdge(entity: LivingEntity, config: HealthIndicatorConfig): Float = when (config.barStyle) {
+        // 爱心：整排居中，右边缘 = 最右一颗心中心(|cx|最大) + 半颗心宽。
+        BarStyle.HEARTS -> {
+            val slotCount = HeartLayout.compute(entity.health, entity.maxHealth, config).slots.size
+            (slotCount * HeartLayout.SPACING) / 2.0f - HeartLayout.SPACING / 2.0f + HeartGraphics.SIZE / 2.0f
+        }
+        // 纯色条：右边缘 = 半宽 + 描边。
+        else -> config.barWidth / 2.0f + 1.0f
     }
 
     /** 构造「当前 / 最大」血量文本：当前值按比例着色（绿/黄/红），最大值按绝对血量分档着色。 */
@@ -525,12 +548,14 @@ object EntityHealthBarRenderer {
         segments: List<TextSegment>,
         config: HealthIndicatorConfig,
         cameraState: CameraRenderState,
+        anchorLeftR: Float? = null,
     ) {
         val font = Minecraft.getInstance().font
         // occludeBehindWalls：true 走 NORMAL（被墙体遮挡），false 走 SEE_THROUGH（始终可见）。
         val displayMode = if (config.occludeBehindWalls) Font.DisplayMode.NORMAL else Font.DisplayMode.SEE_THROUGH
         val totalWorld = segments.sumOf { (font.width(it.text) * it.scale).toDouble() }.toFloat()
-        var penWorld = -totalWorld / 2.0f
+        // anchorLeftR 非空：以该世界 X（屏幕右为正）为左边缘左对齐；否则整体水平居中。
+        var penWorld = anchorLeftR ?: (-totalWorld / 2.0f)
         for (seg in segments) {
             val segWorldWidth = font.width(seg.text) * seg.scale
             val halfHeight = font.lineHeight * seg.scale / 2.0f
