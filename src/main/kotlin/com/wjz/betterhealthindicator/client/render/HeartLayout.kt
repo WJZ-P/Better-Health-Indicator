@@ -23,6 +23,12 @@ object HeartLayout {
     /** 一整排爱心代表的血量（绝对模式分层的层高）。 */
     const val LAYER_HP = HEARTS_PER_ROW * HP_PER_HEART
 
+    /**
+     * 「极限模式」血条阈值：总血条排数 >= 此值即视为强力怪物；当其仅剩最后一排血量时，
+     * 该排改用原版 hardcore 爱心样式，以彰显这是强力怪物的最后一管血。
+     */
+    const val HARDCORE_LAYER_THRESHOLD = 5
+
     /** 顶层填充状态。 */
     enum class Top { NONE, HALF, FULL }
 
@@ -40,14 +46,28 @@ object HeartLayout {
         val topTier: HeartGraphics.HeartTier,
     )
 
-    /** 一颗心的视觉位置与颜色，供掉血粒子按血量定位取色。 */
-    class HeartRef(val cx: Float, val tier: HeartGraphics.HeartTier)
+    /**
+     * 一颗心的视觉位置与颜色，供掉血粒子按血量定位取色。
+     * @param hardcore 该颗心是否极限模式样式（强力怪物的最后一排=绝对 layer 0），掉血粒子据此与血条同款贴图。
+     */
+    class HeartRef(val cx: Float, val tier: HeartGraphics.HeartTier, val hardcore: Boolean = false)
 
     /**
      * @param slots 槽位列表
      * @param multiplier 当前血量多于一排时显示的 xN 倍数（N=当前血量所占排数，随掉血动态递减）；为 0 表示仅剩一排、不显示
+     * @param topHardcore 顶层（当前层）是否用极限模式样式；当当前层即"最后一排"(绝对 layer 0) 且为强力怪物时为 true
+     * @param baseHardcore 底层（揭示出的下一层）是否用极限模式样式；当下层即"最后一排"(绝对 layer 0) 时为 true
+     *
+     * 容器是否极限模式 = topHardcore || baseHardcore（本行最底层是最后一排时容器即用 hardcore）。
      */
-    class View(val slots: List<Slot>, val multiplier: Int)
+    class View(
+        val slots: List<Slot>,
+        val multiplier: Int,
+        val topHardcore: Boolean = false,
+        val baseHardcore: Boolean = false,
+    ) {
+        val containerHardcore: Boolean get() = topHardcore || baseHardcore
+    }
 
     /**
      * 多倍血条「xN」倍数的分档配色（RGB，不含 alpha），头顶与面板共用以保持一致：
@@ -96,12 +116,18 @@ object HeartLayout {
         // 当前血量 <=20（仅剩一排）则为 1，不标注——故只有当前多于一排时才显示「xN」。
         val currentLayers = currentLayer + 1
         val multiplier = if (currentLayers >= 2) currentLayers else 0
+        // 极限模式按「绝对层」判定：强力怪物（总排数 >= 阈值）的最后一排恒为 layer 0，
+        // 该层无论作为顶层（仅剩一排）还是底层（剩一排半时被揭示）都用 hardcore 样式。
+        val totalLayers = ceil(maxHealth / LAYER_HP).toInt()
+        val powerful = totalLayers >= HARDCORE_LAYER_THRESHOLD
+        val topHardcore = powerful && currentLayer == 0 // 顶层即 layer 0
+        val baseHardcore = powerful && currentLayer == 1 // 底层 = currentLayer-1 = layer 0
 
         val slots = buildSlots(HEARTS_PER_ROW, config.drainFromRight) { logical ->
             val top = fillFor(hpInTop - logical * HP_PER_HEART, HP_PER_HEART)
             Triple(top, topTier, baseTier)
         }
-        return View(slots, multiplier)
+        return View(slots, multiplier, topHardcore, baseHardcore)
     }
 
     /** 不分层：相对模式按固定心数等比例；绝对模式按 2HP/心（>20HP 时压缩）。单层红心、黑底。 */
@@ -125,7 +151,10 @@ object HeartLayout {
             val layer = floor(hp / LAYER_HP).toInt().coerceAtLeast(0)
             val hpInLayer = hp - layer * LAYER_HP
             val logical = floor(hpInLayer / HP_PER_HEART).toInt().coerceIn(0, HEARTS_PER_ROW - 1)
-            return HeartRef(cxFor(logical, HEARTS_PER_ROW, config.drainFromRight), HeartGraphics.HeartTier.byLayer(layer))
+            // 该心是否极限模式：强力怪物的最后一排（绝对 layer 0）。与血条 hardcore 判定同源，粒子贴图自动跟随。
+            val powerful = ceil(maxHealth / LAYER_HP).toInt() >= HARDCORE_LAYER_THRESHOLD
+            val hardcore = powerful && layer == 0
+            return HeartRef(cxFor(logical, HEARTS_PER_ROW, config.drainFromRight), HeartGraphics.HeartTier.byLayer(layer), hardcore)
         }
         val heartCount = flatHeartCount(maxHealth, config)
         val hpPer = maxHealth / heartCount

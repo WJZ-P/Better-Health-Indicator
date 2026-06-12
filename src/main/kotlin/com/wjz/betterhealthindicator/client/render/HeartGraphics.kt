@@ -25,12 +25,34 @@ object HeartGraphics {
     // 受击/回血高亮：心容器外圈闪白（原版同款），头顶 3D 血条用。
     val CONTAINER_BLINKING: Identifier = heartSprite("container_blinking")
 
+    // 极限（hardcore）模式容器：强力怪物仅剩最后一排血条时启用，外观更硬核。
+    val CONTAINER_HARDCORE: Identifier = heartSprite("container_hardcore")
+    val CONTAINER_HARDCORE_BLINKING: Identifier = heartSprite("container_hardcore_blinking")
+
     const val SIZE: Float = 9.0f
 
     // —— GUI（2D HUD）用心形精灵 id：走 GUI 图集（无 textures/gui/sprites 前缀、无 .png），供屏幕面板心形血条复用。 ——
     // container_blinking 即原版受击/回血时的白色外圈高亮。
     val GUI_CONTAINER: Identifier = Identifier.withDefaultNamespace("hud/heart/container")
     val GUI_CONTAINER_BLINKING: Identifier = Identifier.withDefaultNamespace("hud/heart/container_blinking")
+    val GUI_CONTAINER_HARDCORE: Identifier = Identifier.withDefaultNamespace("hud/heart/container_hardcore")
+    val GUI_CONTAINER_HARDCORE_BLINKING: Identifier = Identifier.withDefaultNamespace("hud/heart/container_hardcore_blinking")
+
+    /** 按是否极限模式选择心容器 GUI sprite（含受击闪白态）。 */
+    fun guiContainer(hardcore: Boolean, blinking: Boolean): Identifier = when {
+        hardcore && blinking -> GUI_CONTAINER_HARDCORE_BLINKING
+        hardcore -> GUI_CONTAINER_HARDCORE
+        blinking -> GUI_CONTAINER_BLINKING
+        else -> GUI_CONTAINER
+    }
+
+    /** 按是否极限模式选择心容器世界 sprite（头顶 3D 血条用，含受击闪白态）。 */
+    fun container(hardcore: Boolean, blinking: Boolean): Identifier = when {
+        hardcore && blinking -> CONTAINER_HARDCORE_BLINKING
+        hardcore -> CONTAINER_HARDCORE
+        blinking -> CONTAINER_BLINKING
+        else -> CONTAINER
+    }
 
     /**
      * 分层爱心颜色，全部取自原版自带的异色心形精灵（无需染色/额外资源）。
@@ -47,9 +69,25 @@ object HeartGraphics {
         val full: Identifier = heartSprite(fullName)
         val half: Identifier = heartSprite(halfName)
 
+        // 极限（hardcore）模式贴图：原版在 full/half 前插入 "hardcore_"（如 absorbing_hardcore_full）。
+        private val hardcoreFullName = fullName.replace("full", "hardcore_full")
+        private val hardcoreHalfName = halfName.replace("half", "hardcore_half")
+        val hardcoreFull: Identifier = heartSprite(hardcoreFullName)
+        val hardcoreHalf: Identifier = heartSprite(hardcoreHalfName)
+
         // GUI 图集版（供 2D 面板心形血条用）。
         val guiFull: Identifier = Identifier.withDefaultNamespace("hud/heart/$fullName")
         val guiHalf: Identifier = Identifier.withDefaultNamespace("hud/heart/$halfName")
+        val guiHardcoreFull: Identifier = Identifier.withDefaultNamespace("hud/heart/$hardcoreFullName")
+        val guiHardcoreHalf: Identifier = Identifier.withDefaultNamespace("hud/heart/$hardcoreHalfName")
+
+        /** 按是否极限模式选择满/半心贴图（世界 sprite，头顶 3D 用）。 */
+        fun fullFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreFull else full
+        fun halfFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreHalf else half
+
+        /** 按是否极限模式选择满/半心贴图（GUI 图集，2D 面板用）。 */
+        fun guiFullFor(hardcore: Boolean): Identifier = if (hardcore) guiHardcoreFull else guiFull
+        fun guiHalfFor(hardcore: Boolean): Identifier = if (hardcore) guiHardcoreHalf else guiHalf
 
         companion object {
             /** 按叠层索引取颜色，超出调色板则循环。 */

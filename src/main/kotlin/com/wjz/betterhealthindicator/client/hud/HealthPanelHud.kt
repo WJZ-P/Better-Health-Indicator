@@ -366,30 +366,30 @@ object HealthPanelHud {
         mirrorHalf: Boolean,
     ) {
         val top = centerY - HEART_SIZE / 2
-        val container = if (blinking) HeartGraphics.GUI_CONTAINER_BLINKING else HeartGraphics.GUI_CONTAINER
+        val container = HeartGraphics.guiContainer(view.containerHardcore, blinking)
         // HeartLayout 的 cx 是给 3D billboard 用的（渲染带 scale(-x) 镜像，屏幕左对应大 cx）。
         // 2D 面板无该镜像，故按 cx 降序还原同样的屏幕左→右视觉顺序（含掉血方向）。
         val ordered = view.slots.sortedByDescending { it.cx }
         ordered.forEachIndexed { i, slot ->
             val x = x0 + i * HEART_STEP
             graphics.blitSprite(RenderPipelines.GUI_TEXTURED, container, x, top, HEART_SIZE, HEART_SIZE)
-            // 分层时空出的顶层揭示下一层满心作底，而非黑底。
+            // 分层时空出的顶层揭示下一层满心作底，而非黑底；底层是否极限模式独立于顶层。
             slot.baseTier?.let {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, it.guiFull, x, top, HEART_SIZE, HEART_SIZE)
+                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, it.guiFullFor(view.baseHardcore), x, top, HEART_SIZE, HEART_SIZE)
             }
             when (slot.top) {
                 HeartLayout.Top.FULL ->
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiFull, x, top, HEART_SIZE, HEART_SIZE)
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiFullFor(view.topHardcore), x, top, HEART_SIZE, HEART_SIZE)
                 // 半心填充侧跟随掉血方向：从右往左扣→左半（原版默认 sprite）；从左往右扣→水平镜像成右半。
                 HeartLayout.Top.HALF -> if (mirrorHalf) {
                     val pose = graphics.pose()
                     pose.pushMatrix()
                     pose.translate((2 * x + HEART_SIZE).toFloat(), 0.0f)
                     pose.scale(-1.0f, 1.0f)
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalf, x, top, HEART_SIZE, HEART_SIZE)
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalfFor(view.topHardcore), x, top, HEART_SIZE, HEART_SIZE)
                     pose.popMatrix()
                 } else {
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalf, x, top, HEART_SIZE, HEART_SIZE)
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, slot.topTier.guiHalfFor(view.topHardcore), x, top, HEART_SIZE, HEART_SIZE)
                 }
                 HeartLayout.Top.NONE -> {}
             }

@@ -313,7 +313,8 @@ object EntityHealthBarRenderer {
 
             val ref = HeartLayout.heartRefAt(heartBottom + hpPerHeart * 0.5f, maxHealth, config)
             val isHalf = lostHalves < 2
-            val texture = if (isHalf) ref.tier.half else ref.tier.full
+            // 粒子贴图直接复用血条该颗心的样式（含极限模式）：血条心变 hardcore，迸出的粒子也自动跟随。
+            val texture = if (isHalf) ref.tier.halfFor(ref.hardcore) else ref.tier.fullFor(ref.hardcore)
             // 掉落的是"被打掉的那半边"，与血条上保留的半心相反。
             // drainFromRight 下：满→半 掉右半(flipU=false)，半→空 掉左半(flipU=true)。
             val flipU = isHalf && (if (config.drainFromRight) afterHalves == 0 else afterHalves == 1)
@@ -601,8 +602,8 @@ object EntityHealthBarRenderer {
     ): Int {
         val view = HeartLayout.compute(health, maxHealth, config)
         val halfSize = HeartGraphics.SIZE / 2.0f
-        // 受击/回血高亮：心容器外圈闪白（container_blinking）。
-        val containerTexture = if (blinking) HeartGraphics.CONTAINER_BLINKING else HeartGraphics.CONTAINER
+        // 受击/回血高亮：心容器外圈闪白（container_blinking）。本行最底层为最后一排时用 hardcore 容器。
+        val containerTexture = HeartGraphics.container(view.containerHardcore, blinking)
 
         // 只有两层：container 背板 + 每槽位“自己算出的那一张/两张半心”。
         // 多层血条出现半心时，不再用“下层满心 + 上层半心叠绘”（叠绘会与下层冲突），
@@ -621,7 +622,7 @@ object EntityHealthBarRenderer {
             val cy = scatter[1]
             val rot = scatter[2]
             add(containerLayer, containerTexture, cx, cy, rot, false)
-            for (q in topHeartQuads(slot, fillFlip)) add(heartLayer, q.texture, cx, cy, rot, q.flipU)
+            for (q in topHeartQuads(slot, fillFlip, view.topHardcore, view.baseHardcore)) add(heartLayer, q.texture, cx, cy, rot, q.flipU)
         }
 
         // 把“世界深度偏移”换算为 billboard 局部 z：billboard 会以 config.scale 缩放局部坐标，故局部 z = 世界偏移 / scale。
@@ -655,18 +656,21 @@ object EntityHealthBarRenderer {
         }
     }
 
-    /** 计算某槽位「彩色爱心层」要绘制的贴图片（与活体血条一致），供血条与死亡序列复用。 */
-    private fun topHeartQuads(slot: HeartLayout.Slot, fillFlip: Boolean): List<TexQuad> = when (slot.top) {
+    /**
+     * 计算某槽位「彩色爱心层」要绘制的贴图片（与活体血条一致）。
+     * 顶层用 [topHardcore]、底层（揭示出的下一层）用 [baseHardcore]，使最后一排（layer 0）单独走极限样式。
+     */
+    private fun topHeartQuads(slot: HeartLayout.Slot, fillFlip: Boolean, topHardcore: Boolean, baseHardcore: Boolean): List<TexQuad> = when (slot.top) {
         // 满心：直接画当前层满心（满心对称，flipU 无意义）。
-        HeartLayout.Top.FULL -> listOf(TexQuad(slot.topTier.full, false))
+        HeartLayout.Top.FULL -> listOf(TexQuad(slot.topTier.fullFor(topHardcore), false))
         // 空缺：有下层则露出下层满心颜色；无下层就只剩 container（黑底）。
-        HeartLayout.Top.NONE -> slot.baseTier?.let { listOf(TexQuad(it.full, false)) } ?: emptyList()
+        HeartLayout.Top.NONE -> slot.baseTier?.let { listOf(TexQuad(it.fullFor(baseHardcore), false)) } ?: emptyList()
         HeartLayout.Top.HALF -> if (slot.baseTier != null) {
             // 多层半心：左右两片互补异色半心并排（同层同深度、像素互不重叠），避免与下层冲突。
-            listOf(TexQuad(slot.topTier.half, fillFlip), TexQuad(slot.baseTier.half, !fillFlip))
+            listOf(TexQuad(slot.topTier.halfFor(topHardcore), fillFlip), TexQuad(slot.baseTier.halfFor(baseHardcore), !fillFlip))
         } else {
             // 单层半心：保留侧画当前层颜色，另一侧露出黑色 container。
-            listOf(TexQuad(slot.topTier.half, fillFlip))
+            listOf(TexQuad(slot.topTier.halfFor(topHardcore), fillFlip))
         }
     }
 
