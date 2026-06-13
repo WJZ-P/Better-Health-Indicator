@@ -1,15 +1,25 @@
+# Better Health Indicator
+
 ![Better Health Indicator](markdown/banner.png)
 
 <div align="center">
 
-# Better Health Indicator
 
 **告别单调血条，让每一次战斗都拥有精美、灵动、丝滑的血量反馈。**
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.1-brightgreen)](https://www.minecraft.net/)
-[![Fabric](https://img.shields.io/badge/Loader-Fabric-blue)](https://fabricmc.net/)
-[![Environment](https://img.shields.io/badge/Env-客户端-orange)](#)
-[![License](https://img.shields.io/badge/License-AGPL--3.0-lightgrey)](LICENSE)
+<a href="https://github.com/WJZ-P/Better-Health-Indicator/graphs/contributors"><img src="https://img.shields.io/github/contributors/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="Contributors"></a>
+&nbsp;
+<a href="https://github.com/WJZ-P/Better-Health-Indicator/network/members"><img src="https://img.shields.io/github/forks/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="Forks"></a>
+&nbsp;
+<a href="https://github.com/WJZ-P/Better-Health-Indicator/stargazers"><img src="https://img.shields.io/github/stars/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="Stars"></a>
+&nbsp;
+<a href="https://github.com/WJZ-P/Better-Health-Indicator/issues"><img src="https://img.shields.io/github/issues/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="Issues"></a>
+&nbsp;
+<a href="https://github.com/WJZ-P/Better-Health-Indicator/blob/main/LICENSE"><img src="https://img.shields.io/github/license/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="License"></a>
+
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.1-brightgreen?style=flat-square)](https://www.minecraft.net/)
+[![Fabric](https://img.shields.io/badge/Loader-Fabric-blue?style=flat-square)](https://fabricmc.net/)
+[![Environment](https://img.shields.io/badge/Env-客户端-orange?style=flat-square)](#)
 
 </div>
 
@@ -18,14 +28,6 @@
 ## 🎬 效果演示
 
 https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
-
-<div align="center">
-
-<video src="https://pro-cs-freq.udeskcs.com/chat_upload/tid26/1b9bccca8a3f396e58fdae041318698d1781328908_1781328908662_97c07b?OSSAccessKeyId=LTAI5tGLdqHDT2hBX8kvY2WR&Expires=1781357708&Signature=sDwHeNAevwYh4P5Vua%2B9bRe1Q44%3D" controls width="80%"></video>
-
-</div>
-
-> 若所在平台不支持内嵌视频，可直接打开：[markdown/example.mp4](markdown/example.mp4)
 
 ---
 
@@ -65,8 +67,6 @@ https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
 1. 安装 [Fabric Loader](https://fabricmc.net/use/)。
 2. 下载并放入 `mods` 文件夹：
    - 本模组 **Better Health Indicator**
-   - [Fabric API](https://modrinth.com/mod/fabric-api)（必需）
-   - [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin)（必需）
 3. *（可选，强烈推荐）* 安装以下两者即可在游戏内打开图形化设置界面：
    - [Mod Menu](https://modrinth.com/mod/modmenu)
    - [Cloth Config](https://modrinth.com/mod/cloth-config)
@@ -83,9 +83,7 @@ https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
 
 <div align="center">
 
-| 中文界面 | English |
-| :---: | :---: |
-| ![设置界面（中文）](markdown/settings_zh.png) | ![Settings (English)](markdown/settings_en.png) |
+![设置界面](markdown/settings_zh.png)
 
 </div>
 
@@ -119,3 +117,11 @@ https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
 ## 🙌 作者
 
 由 **WJZ_P** 制作喵。欢迎反馈与建议！
+
+<br>
+
+## 如果觉得好用，请给个 ⭐ 支持一下！❤
+
+## ⭐ Star 趋势
+
+[![Stargazers over time](https://starchart.cc/WJZ-P/Better-Health-Indicator.svg?variant=adaptive)](https://starchart.cc/WJZ-P/Better-Health-Indicator)
