@@ -1,4 +1,8 @@
+<div align="center">
+
 # Better Health Indicator
+
+</div>
 
 ![Better Health Indicator](markdown/banner.png)
 
