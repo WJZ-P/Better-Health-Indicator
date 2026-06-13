@@ -9,7 +9,7 @@
 <div align="center">
 
 
-**告别单调血条，让每一次战斗都拥有精美、灵动、丝滑的血量反馈。**
+**Say goodbye to boring health bars — give every fight a beautiful, lively, and silky-smooth health feedback.**
 
 <a href="https://github.com/WJZ-P/Better-Health-Indicator/graphs/contributors"><img src="https://img.shields.io/github/contributors/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="Contributors"></a>
 &nbsp;
@@ -23,106 +23,110 @@
 
 [![Minecraft](https://img.shields.io/badge/Minecraft-26.1-brightgreen?style=flat-square)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Loader-Fabric-blue?style=flat-square)](https://fabricmc.net/)
-[![Environment](https://img.shields.io/badge/Env-客户端-orange?style=flat-square)](#)
+[![Environment](https://img.shields.io/badge/Env-Client--side-orange?style=flat-square)](#)
+
+[English](README.md) | [中文](README.zh-CN.md)
 
 </div>
 
 ---
 
-## 🎬 效果演示
+## 🎬 Demo
 
 https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
 
 ---
 
-## 📖 这是什么
+## 📖 What is it
 
-**Better Health Indicator** 是一款**纯客户端** Fabric 模组，用精美、动态、带平滑动画的血量显示，取代原版朴素的血量呈现。它会在**生物头顶**绘制爱心血条，并在**屏幕角落**提供一个信息丰富的目标面板。
+**Better Health Indicator** is a **client-side** Fabric mod that replaces the plain vanilla health display with a beautiful, dynamic, smoothly animated one. It draws heart bars **above entities** and provides an informative target **panel in a screen corner**.
 
-> 🟢 **仅客户端运行**：无需安装在服务器上，对普通生物与玩家在大多数服务器都能正常工作。
-
----
-
-## ✨ 功能特性
-
-### 🩸 头顶血条
-- **原版风格爱心图标**，清晰漂亮地浮在生物头顶。
-- **高血量生物多排分层爱心**：最底排始终是原版红心（强力怪物的最后一排会变为**极限模式硬核爱心**），上层血条由灰度模板**运行时染色**生成，**每一层颜色都可自定义**。
-- **动态「× N」倍数**：血量很多的生物按数量分档着色显示倍数，掉血时实时更新。
-- **受击反馈**：命中时从对应爱心位置迸出掉落爱心粒子（强度随伤害分档）、爱心散开 + 倾斜晃动、容器外圈闪白高亮——全部可开关。
-- **残血颤抖**：血量低于可设阈值时，整排爱心错峰抖动，还原原版濒死手感。
-- **死亡碎裂**：生物死亡时爱心容器逐颗连锁迸裂。
-- **名字与详情**：可选显示名字（字号 / 加粗可调）；血量数值或倍数可贴在血条右侧或接在名字之后。可选**屏蔽原版浮空名字**，避免重复与遮挡。
-
-### 🖼️ 屏幕目标面板
-- 在屏幕角落显示你**正在注视 / 最近攻击**的目标。
-- 展示**实时 3D 模型**（方形或圆形边框）、名字、血量（血条或爱心）以及**药水效果图标**。
-- 支持**浅色 / 深色主题**、透明度调节、宽度自适应。
-
-### 🎛️ 显示与控制
-- 显示策略：**屏幕内** 或 **准星对准**，并支持受击追踪（刚打过的怪会继续显示一会儿）。
-- 最大距离、是否显示自己、是否显示满血生物、被墙体遮挡时是否隐藏等都可调。
-- 可隐藏原版掉血爱心粒子，避免视觉冲突。
+> 🟢 **Client-side only**: no need to install it on the server; it works for regular mobs and players on most servers.
 
 ---
 
-## 📦 安装
+## ✨ Features
 
-1. 安装 [Fabric Loader](https://fabricmc.net/use/)。
-2. 下载并放入 `mods` 文件夹：
-   - 本模组 **Better Health Indicator**
-3. *（可选，强烈推荐）* 安装以下两者即可在游戏内打开图形化设置界面：
+### 🩸 Over-head health bars
+- **Vanilla-style heart icons**, crisp and pretty above each entity.
+- **Tiered multi-row hearts for high-HP mobs**: the bottom row is always vanilla red (the last row of powerful mobs becomes **hardcore hearts**), while upper rows are **tinted at runtime** from a grayscale template, with **every tier's color customizable**.
+- **Dynamic "× N" multiplier**: mobs with lots of health show a color-coded multiplier by amount, updated live as they take damage.
+- **Hit feedback**: on hit, dropping heart particles burst from the matching heart position (intensity scales with damage), hearts scatter + tilt, and the container outline blinks white — all toggleable.
+- **Low-health tremor**: when health drops below a configurable threshold, the heart row trembles with staggered timing, recreating the vanilla near-death feel.
+- **Death shatter**: heart containers chain-burst one by one when an entity dies.
+- **Name & details**: optional name display (scale / bold adjustable); the health value or multiplier can sit to the right of the bar or after the name. Optionally **hides the vanilla floating name** to avoid duplication and overlap.
+
+### 🖼️ Screen target panel
+- Shows the target you are **looking at / recently attacked** in a screen corner.
+- Displays a **live 3D model** (square or round frame), name, health (bar or hearts), and **potion-effect icons**.
+- Supports **light / dark themes**, adjustable transparency, and auto-resizing width.
+
+### 🎛️ Display & control
+- Display modes: **On Screen** or **Looking At**, with attack tracking (a mob you just hit keeps showing for a while).
+- Max distance, show self, show full-health entities, hide behind walls, and more are all configurable.
+- Can hide vanilla damage heart particles to avoid visual conflict.
+
+---
+
+## 📦 Installation
+
+1. Install [Fabric Loader](https://fabricmc.net/use/).
+2. Download and drop into your `mods` folder:
+   - This mod, **Better Health Indicator**
+   - [Fabric API](https://modrinth.com/mod/fabric-api) — **Required**
+   - [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin) — **Required**
+3. *(Optional, highly recommended)* Install both of these to get an in-game graphical settings screen:
    - [Mod Menu](https://modrinth.com/mod/modmenu)
    - [Cloth Config](https://modrinth.com/mod/cloth-config)
 
-**环境要求**：Minecraft **26.1**、Java **25+**。
+**Requirements**: Minecraft **26.1**, Java **25+**.
 
 ---
 
-## ⚙️ 配置
+## ⚙️ Configuration
 
-- 装了 **Mod Menu + Cloth Config**：在「模组列表 → Better Health Indicator → 设置」中即可可视化调整全部选项。
-- 没装也没关系：所有配置仍会从 `config/better_health_indicator.json` 读取，可手动编辑。
-- 设置界面已**完整本地化**，会跟随你的游戏语言显示中文 / 英文。
+- With **Mod Menu + Cloth Config**: tweak every option visually via "Mods list → Better Health Indicator → Config".
+- Without them: all settings still load from `config/better_health_indicator.json` and can be edited by hand.
+- The settings screen is **fully localized** and follows your game language (Chinese / English).
 
 <div align="center">
 
-![设置界面](markdown/settings_zh.png)
+![Settings screen](markdown/settings_en.png)
 
 </div>
 
 ---
 
-## ❓ 常见问题
+## ❓ FAQ
 
-**Q：服务器需要装这个模组吗？**
-不需要，纯客户端即可使用。
+**Q: Does the server need this mod?**
+No, it's purely client-side.
 
-**Q：可以和性能 / 光影模组一起用吗？**
-可以，本模组只做血量显示，不改动世界逻辑。
-
----
-
-## 🧩 兼容性
-
-- 加载器：**Fabric**
-- 版本：**Minecraft 26.1**
-- 纯客户端，不影响存档与服务器。
+**Q: Can I use it with performance / shader mods?**
+Yes. This mod only handles health display and doesn't touch world logic.
 
 ---
 
-## 📜 许可证
+## 🧩 Compatibility
 
-本项目基于 **AGPL-3.0** 许可证开源，详见 [LICENSE](LICENSE)。
+- Loader: **Fabric**
+- Version: **Minecraft 26.1**
+- Client-side only; does not affect saves or servers.
 
-## 🙌 作者
+---
 
-由 **WJZ_P** 制作喵。欢迎反馈与建议！
+## 📜 License
+
+This project is open-sourced under the **AGPL-3.0** license. See [LICENSE](LICENSE) for details.
+
+## 🙌 Author
+
+Made by **WJZ_P**. Feedback and suggestions are welcome!
 
 <br>
 
-## 如果觉得好用，请给个 ⭐ 支持一下！❤
+## If you find it useful, please give it a ⭐ to show your support! ❤
 
-## ⭐ Star 趋势
+## ⭐ Star History
 
 [![Stargazers over time](https://starchart.cc/WJZ-P/Better-Health-Indicator.svg?variant=adaptive)](https://starchart.cc/WJZ-P/Better-Health-Indicator)
