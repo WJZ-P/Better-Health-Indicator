@@ -1,22 +1,7 @@
 package com.wjz.betterhealthindicator.config
 
-/** 头顶血条样式。 */
-enum class BarStyle {
-    /** 原版爱心图标（默认）。 */
-    HEARTS,
-
-    /** 纯色矩形血条。 */
-    BAR,
-
-    /** 纯数字血量（如 18/20）。 */
-    NUMERIC,
-}
-
 /** 显示策略：决定哪些生物会被显示血量。 */
 enum class DisplayMode {
-    /** 范围内全部显示。 */
-    ALWAYS,
-
     /** 仅显示准星对准的生物。 */
     LOOKING_AT,
 
@@ -83,7 +68,6 @@ class HealthIndicatorConfig {
 
     // 头顶血条
     var headBarEnabled: Boolean = Defaults.HEAD_BAR_ENABLED
-    var barStyle: BarStyle = Defaults.BAR_STYLE
     // 血量换算：绝对(默认) 严格 2HP/心；相对 固定心数按比例。
     var healthMode: HealthMode = Defaults.HEALTH_MODE
     // 掉血方向：true 从右往左扣（最右先空，原版一致）；false 从左往右扣。
@@ -159,13 +143,12 @@ class HealthIndicatorConfig {
     object Defaults {
         const val ENABLED: Boolean = true
         const val MAX_DISTANCE: Double = 48.0
-        val DISPLAY_MODE: DisplayMode = DisplayMode.ALWAYS
+        val DISPLAY_MODE: DisplayMode = DisplayMode.ON_SCREEN
         const val TRACK_ATTACKED: Boolean = true
         const val ATTACK_TRACKING_SECONDS: Double = 5.0
         const val HIDE_VANILLA_DAMAGE_PARTICLES: Boolean = true
 
         const val HEAD_BAR_ENABLED: Boolean = true
-        val BAR_STYLE: BarStyle = BarStyle.HEARTS
         val HEALTH_MODE: HealthMode = HealthMode.ABSOLUTE
         const val DRAIN_FROM_RIGHT: Boolean = true
         const val TIERED_HEARTS: Boolean = true

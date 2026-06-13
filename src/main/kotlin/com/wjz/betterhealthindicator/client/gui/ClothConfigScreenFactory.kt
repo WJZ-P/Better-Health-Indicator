@@ -1,6 +1,5 @@
 package com.wjz.betterhealthindicator.client.gui
 
-import com.wjz.betterhealthindicator.config.BarStyle
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.DisplayMode
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig.Defaults
@@ -76,12 +75,6 @@ object ClothConfigScreenFactory {
 
         val head = builder.getOrCreateCategory(Component.literal("头顶血条"))
 
-        head.addEntry(
-            entry.startEnumSelector(Component.literal("血条样式"), BarStyle::class.java, config.barStyle)
-                .setDefaultValue(Defaults.BAR_STYLE)
-                .setSaveConsumer { config.barStyle = it }
-                .build(),
-        )
         head.addEntry(
             entry.startBooleanToggle(Component.literal("显示名字"), config.showName)
                 .setDefaultValue(Defaults.SHOW_NAME)

@@ -1,9 +1,7 @@
 package com.wjz.betterhealthindicator.client.render
 
 import com.mojang.blaze3d.vertex.PoseStack
-import com.mojang.blaze3d.vertex.VertexConsumer
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
-import com.wjz.betterhealthindicator.config.BarStyle
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
@@ -21,7 +19,6 @@ import net.minecraft.resources.Identifier
 import net.minecraft.util.LightCoordsUtil
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
-import org.joml.Matrix4f
 import org.joml.Vector3f
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -277,8 +274,8 @@ object EntityHealthBarRenderer {
         val hpPerHeart = HeartLayout.hpPerHeart(maxHealth, config)
         if (hpPerHeart <= 0.0f) return
 
-        // 受击：登记爱心散开（仅心形样式 + 受击反馈开关开启；档次阈值与掉落粒子一致，独立于粒子开关）。
-        if (config.barStyle == BarStyle.HEARTS && config.headHeartHitEffect) {
+        // 受击：登记爱心散开（受击反馈开关开启；档次阈值与掉落粒子一致，独立于粒子开关）。
+        if (config.headHeartHitEffect) {
             val mult = scatterTierMult(previous - current, config)
             HeartScatterTracker.trigger(entity.id, HEART_SCATTER_STRENGTH * mult, HEART_SCATTER_SWING * mult)
         }
@@ -434,27 +431,21 @@ object EntityHealthBarRenderer {
         val distanceSq = entity.distanceToSqr(cameraPosition.x, cameraPosition.y, cameraPosition.z)
         val healthRatio = (entity.health / entity.maxHealth).coerceIn(0.0f, 1.0f)
 
-        var heartMultiplier = 0
-        when (config.barStyle) {
-            BarStyle.BAR -> submitBar(collector, poseStack, base, barHeight, healthRatio, config)
-            BarStyle.HEARTS -> heartMultiplier =
-                submitHearts(
-                    collector, poseStack, base, barHeight, entity.id, entity.health, entity.maxHealth, config,
-                    // 受击白光：始终更新追踪状态以保持一致，再与统一开关相与决定是否真正闪白。
-                    HeartBlinkTracker.update(entity.id, entity.health) && config.headHeartHitEffect,
-                )
-            BarStyle.NUMERIC -> {} // 数值样式仅显示文本
-        }
+        val heartMultiplier = submitHearts(
+            collector, poseStack, base, barHeight, entity.id, entity.health, entity.maxHealth, config,
+            // 受击白光：始终更新追踪状态以保持一致，再与统一开关相与决定是否真正闪白。
+            HeartBlinkTracker.update(entity.id, entity.health) && config.headHeartHitEffect,
+        )
 
         val nameScale = NAME_TAG_SCALE * config.textScale.toFloat()
 
         // 名字行：名字保留自定义命名颜色；其后用彩色分隔符隔开追加「血量数值」或「x倍数」。
-        // - 开启血量数值（或数值样式）：显示「当前/上限」，不显示倍数；
+        // - 开启血量数值：显示「当前/上限」，不显示倍数；
         // - 关闭血量数值：多倍血条（>=2 排）生物在该位置改显「x倍数」（按倍数分档着色）。
-        val showHp = config.showHealthText || config.barStyle == BarStyle.NUMERIC
+        val showHp = config.showHealthText
         val showMult = !showHp && heartMultiplier >= 2
-        // 详情（血量数值 / x倍数）可选放到血条右侧：数值样式无血条几何，仍并入名字行。
-        val detailBesideBar = config.detailBesideBar && config.barStyle != BarStyle.NUMERIC
+        // 详情（血量数值 / x倍数）可选放到爱心血条右侧。
+        val detailBesideBar = config.detailBesideBar
 
         // 构造详情文本片段（hp 或 x倍数），供名字行或血条右侧复用。
         val detailSegment: TextSegment? = when {
@@ -480,9 +471,7 @@ object EntityHealthBarRenderer {
             segments.add(detailSegment)
         }
         if (segments.isNotEmpty()) {
-            // 数值样式无血条几何，文本落在血条基准高度；其余样式落在血条上方。
-            val labelY = if (config.barStyle == BarStyle.NUMERIC) barHeight else barHeight + LINE_GAP * 2.5
-            submitTextLine(collector, poseStack, base, labelY, segments, config, cameraState)
+            submitTextLine(collector, poseStack, base, barHeight + LINE_GAP * 2.5, segments, config, cameraState)
         }
         // 「血条右侧」详情：与血条同高，左对齐贴在血条右边缘外（爱心/血条本身仍居中）。
         if (detailBesideBar && detailSegment != null) {
@@ -492,15 +481,11 @@ object EntityHealthBarRenderer {
         }
     }
 
-    /** 血条右边缘的 billboard 局部 X 半宽（用于把详情文本贴到血条右侧）。 */
-    private fun barRightLocalEdge(entity: LivingEntity, config: HealthIndicatorConfig): Float = when (config.barStyle) {
-        // 爱心：整排居中，右边缘 = 最右一颗心中心(|cx|最大) + 半颗心宽。
-        BarStyle.HEARTS -> {
-            val slotCount = HeartLayout.compute(entity.health, entity.maxHealth, config).slots.size
-            (slotCount * HeartLayout.SPACING) / 2.0f - HeartLayout.SPACING / 2.0f + HeartGraphics.SIZE / 2.0f
-        }
-        // 纯色条：右边缘 = 半宽 + 描边。
-        else -> config.barWidth / 2.0f + 1.0f
+    /** 爱心血条右边缘的 billboard 局部 X 半宽（用于把详情文本贴到血条右侧）。 */
+    private fun barRightLocalEdge(entity: LivingEntity, config: HealthIndicatorConfig): Float {
+        // 整排居中，右边缘 = 最右一颗心中心(|cx|最大) + 半颗心宽。
+        val slotCount = HeartLayout.compute(entity.health, entity.maxHealth, config).slots.size
+        return (slotCount * HeartLayout.SPACING) / 2.0f - HeartLayout.SPACING / 2.0f + HeartGraphics.SIZE / 2.0f
     }
 
     /** 构造「当前 / 最大」血量文本：当前值按比例着色（绿/黄/红），最大值按绝对血量分档着色。 */
@@ -583,33 +568,6 @@ object EntityHealthBarRenderer {
                 poseStack.popPose()
             }
             penWorld += segWorldWidth
-        }
-    }
-
-    private fun submitBar(
-        collector: SubmitNodeCollector,
-        poseStack: PoseStack,
-        base: Vec3,
-        height: Double,
-        healthRatio: Float,
-        config: HealthIndicatorConfig,
-    ) {
-        val width = config.barWidth
-        val barHeight = config.barHeight
-        val left = -width / 2.0f
-        val right = width / 2.0f
-        val top = -barHeight / 2.0f
-        val bottom = barHeight / 2.0f
-        val fillRight = left + width * healthRatio
-        val border = 1.0f
-
-        billboard(poseStack, base, height, config.scale) {
-            collector.submitCustomGeometry(poseStack, RenderTypes.debugQuads()) { pose, consumer ->
-                val m = pose.pose()
-                solidQuad(consumer, m, left - border, top - border, right + border, bottom + border, config.borderColor)
-                solidQuad(consumer, m, left, top, right, bottom, config.backgroundColor)
-                solidQuad(consumer, m, left, top, fillRight, bottom, healthColor(healthRatio, config.foregroundAlpha))
-            }
         }
     }
 
@@ -764,31 +722,4 @@ object EntityHealthBarRenderer {
         }
     }
 
-    private fun solidQuad(consumer: VertexConsumer, matrix: Matrix4f, left: Float, top: Float, right: Float, bottom: Float, color: Int) {
-        consumer.addVertex(matrix, left, bottom, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-        consumer.addVertex(matrix, right, bottom, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-        consumer.addVertex(matrix, right, top, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-        consumer.addVertex(matrix, left, top, 0.0f).setColor(color).setLight(LightCoordsUtil.FULL_BRIGHT)
-    }
-
-    /** 血量从满到空：绿 -> 黄 -> 红。 */
-    private fun healthColor(ratio: Float, alpha: Int): Int {
-        val red: Int
-        val green: Int
-        if (ratio >= 0.5f) {
-            red = ((1.0f - ratio) * 2.0f * 255.0f).toInt()
-            green = 255
-        } else {
-            red = 255
-            green = (ratio * 2.0f * 255.0f).toInt()
-        }
-        return argb(alpha, red, green, 48)
-    }
-
-    private fun argb(alpha: Int, red: Int, green: Int, blue: Int): Int {
-        return (alpha.coerceIn(0, 255) shl 24) or
-            (red.coerceIn(0, 255) shl 16) or
-            (green.coerceIn(0, 255) shl 8) or
-            blue.coerceIn(0, 255)
-    }
 }

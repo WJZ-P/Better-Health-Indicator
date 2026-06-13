@@ -52,7 +52,6 @@ object EntitySelector {
         if (!passesCommonFilters(entity, frame)) return false
 
         when (frame.config.displayMode) {
-            DisplayMode.ALWAYS -> {}
             // 准星正对的目标显示；此外，最近受击目标在有效期内即便准星已移开也持续显示。
             DisplayMode.LOOKING_AT ->
                 if (entity !== frame.lookedAtEntity && !AttackTracker.isTracked(entity, frame.config)) return false

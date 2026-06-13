@@ -48,6 +48,11 @@ object ConfigManager {
         if (value.tierColors == null || value.tierColors.isEmpty()) {
             value.tierColors = HealthIndicatorConfig.Defaults.TIER_COLORS.toMutableList()
         }
+        // 旧配置可能写有已移除的枚举值（如 displayMode=ALWAYS），GSON 解析失败会置 null，这里回退默认值。
+        @Suppress("SENSELESS_COMPARISON")
+        if (value.displayMode == null) {
+            value.displayMode = HealthIndicatorConfig.Defaults.DISPLAY_MODE
+        }
     }
 
     fun save() {
