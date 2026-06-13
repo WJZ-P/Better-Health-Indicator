@@ -23,7 +23,7 @@ class ModMenuIntegration : ModMenuApi {
                 AlertScreen(
                     { Minecraft.getInstance().setScreen(parent) },
                     Component.literal("Better Health Indicator"),
-                    Component.literal("需要安装 Cloth Config 才能打开图形化设置界面，配置仍可在 config/better_health_indicator.json 手动编辑。"),
+                    Component.translatable("bhi.modmenu.cloth_required"),
                 )
             }
         }
