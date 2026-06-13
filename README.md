@@ -17,6 +17,8 @@
 
 ## 🎬 效果演示
 
+https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
+
 <div align="center">
 
 <video src="https://pro-cs-freq.udeskcs.com/chat_upload/tid26/1b9bccca8a3f396e58fdae041318698d1781328908_1781328908662_97c07b?OSSAccessKeyId=LTAI5tGLdqHDT2hBX8kvY2WR&Expires=1781357708&Signature=sDwHeNAevwYh4P5Vua%2B9bRe1Q44%3D" controls width="80%"></video>
