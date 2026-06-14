@@ -52,6 +52,13 @@ https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
 - **Tiered multi-row hearts for high-HP mobs**: the bottom row is always vanilla red (the last row of powerful mobs becomes **hardcore hearts**), while upper rows are **tinted at runtime** from a grayscale template, with **every tier's color customizable**.
 - **Dynamic "× N" multiplier**: mobs with lots of health show a color-coded multiplier by amount, updated live as they take damage.
 - **Hit feedback**: on hit, dropping heart particles burst from the matching heart position (intensity scales with damage), hearts scatter + tilt, and the container outline blinks white — all toggleable.
+
+<div align="center">
+
+![Hit feedback](markdown/hit_feedback.png)
+
+</div>
+
 - **Low-health tremor**: when health drops below a configurable threshold, the heart row trembles with staggered timing, recreating the vanilla near-death feel.
 - **Death shatter**: heart containers chain-burst one by one when an entity dies.
 - **Name & details**: optional name display (scale / bold adjustable); the health value or multiplier can sit to the right of the bar or after the name. Optionally **hides the vanilla floating name** to avoid duplication and overlap.
