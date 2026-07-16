@@ -7,6 +7,7 @@ stonecutter active "26.1.2" /* [SC] DO NOT EDIT */
 
 stonecutter parameters {
     // 可在源码中使用：//? if minecraft_26_1_or_newer
+    constants["minecraft_26_2_or_newer"] = eval(current.version, ">=26.2")
     constants["minecraft_26_1_or_newer"] = eval(current.version, ">=26.1")
     constants["minecraft_1_21_5_or_newer"] = eval(current.version, ">=1.21.5")
     constants["minecraft_1_21_or_newer"] = eval(current.version, ">=1.21")

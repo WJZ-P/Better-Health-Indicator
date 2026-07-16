@@ -1,5 +1,6 @@
 package com.wjz.betterhealthindicator.client.render
 
+import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import net.minecraft.core.Holder
 import net.minecraft.core.particles.ColorParticleOption
 import net.minecraft.core.particles.ParticleOptions
@@ -19,7 +20,7 @@ import net.minecraft.world.entity.LivingEntity
  *
  * 映射表在 mod 加载时**动态**遍历 [BuiltInRegistries.MOB_EFFECT] 构建（不写死颜色，Mojang 改色也自动跟随）：
  * - 走默认彩色粒子（[ColorParticleOption]，类型 ENTITY_EFFECT）的效果：按 RGB 建表；**排除瞬间效果**
- *   （[MobEffect.isInstantenous]——瞬间生效不会留下持续粒子，且会与 saturation 撞色）。
+ *   （瞬间生效不会留下持续粒子，且会与 saturation 撞色）。
  * - 走自定义粒子类型（如不祥之兆/袭击之兆）的效果：按粒子类型建表，天然唯一、更精确。
  */
 object MobEffectParticleIndex {
@@ -49,7 +50,7 @@ object MobEffectParticleIndex {
                     continue
                 }
                 if (particle is ColorParticleOption) {
-                    if (effect.isInstantenous) continue
+                    if (MinecraftCompat.isInstantaneous(effect)) continue
                     colorToEffect.putIfAbsent(rgbOf(particle), holder)
                 } else {
                     typeToEffect.putIfAbsent(particle.type, holder)

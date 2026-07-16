@@ -28,7 +28,7 @@ stonecutter {
         ).buildscript("build-remapped.gradle.kts")
 
         // 26.1 起 Minecraft 官方发布物不再混淆，使用非重映射 Loom。
-        version("26.1.2").buildscript("build.gradle.kts")
+        versions("26.1.2", "26.2").buildscript("build.gradle.kts")
         vcsVersion = "26.1.2"
     }
 }

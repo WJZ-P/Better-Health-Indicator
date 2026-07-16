@@ -13,8 +13,9 @@
 | 1.21.8 | 21 | 重映射 |
 | 1.21.11 | 21 | 重映射 |
 | 26.1.2 | 25 | 非混淆 |
+| 26.2 | 25 | 非混淆 |
 
-`src/` 保存 VCS 基准版本，目前是 26.1.2。每个版本自己的依赖和 Java 要求位于
+`src/` 保存 VCS 基准版本，目前是 26.1.2；最新稳定目标是 26.2。每个版本自己的依赖和 Java 要求位于
 `versions/<minecraft>/gradle.properties`。
 
 ## 常用命令
@@ -22,6 +23,9 @@
 ```powershell
 # 构建当前 26.1.2 基线
 .\gradlew.bat :26.1.2:build
+
+# 构建最新稳定版本
+.\gradlew.bat :26.2:build
 
 # 将 src/ 切换并预处理为另一个版本
 .\gradlew.bat "Set active project to 1.21.11"

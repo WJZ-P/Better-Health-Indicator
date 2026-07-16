@@ -1,5 +1,6 @@
 package com.wjz.betterhealthindicator.client.gui
 
+import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.terraformersmc.modmenu.api.ConfigScreenFactory
 import com.terraformersmc.modmenu.api.ModMenuApi
 import net.fabricmc.loader.api.FabricLoader
@@ -21,7 +22,7 @@ class ModMenuIntegration : ModMenuApi {
         if (!FabricLoader.getInstance().isModLoaded(CLOTH_CONFIG_MOD_ID)) {
             return ConfigScreenFactory<Screen> { parent ->
                 AlertScreen(
-                    { Minecraft.getInstance().setScreen(parent) },
+                    { MinecraftCompat.setScreen(Minecraft.getInstance(), parent) },
                     Component.literal("Better Health Indicator"),
                     Component.translatable("bhi.modmenu.cloth_required"),
                 )

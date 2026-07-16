@@ -1,5 +1,6 @@
 package com.wjz.betterhealthindicator.client.hud
 
+import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.GLOSS_CELL
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.NAME_COLOR
@@ -9,7 +10,6 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.Gui
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
@@ -151,7 +151,7 @@ object HealthPanelHud {
                 if (!config.enabled || !config.panelEnabled) return@HudElement
 
                 val minecraft = Minecraft.getInstance()
-                if (minecraft.options.hideGui) return@HudElement
+                if (MinecraftCompat.isHudHidden(minecraft)) return@HudElement
 
                 val tickProgress = delta.getGameTimeDeltaPartialTick(false)
                 val frame = EntitySelector.buildFrame(minecraft, config, tickProgress) ?: return@HudElement
@@ -345,7 +345,7 @@ object HealthPanelHud {
     private fun drawEffectIcon(graphics: GuiGraphicsExtractor, display: EffectDisplay, x: Int, y: Int) {
         val background = if (display.ambient) EFFECT_BG_AMBIENT_SPRITE else EFFECT_BG_SPRITE
         graphics.blitSprite(RenderPipelines.GUI_TEXTURED, background, x, y, EFFECT_BG_SIZE, EFFECT_BG_SIZE)
-        val sprite = Gui.getMobEffectSprite(display.effect)
+        val sprite = MinecraftCompat.mobEffectSprite(display.effect)
         graphics.blitSprite(
             RenderPipelines.GUI_TEXTURED, sprite,
             x + EFFECT_ICON_INSET, y + EFFECT_ICON_INSET, EFFECT_ICON_SIZE, EFFECT_ICON_SIZE,
@@ -480,7 +480,8 @@ object HealthPanelHud {
      * 0 表示玩家正看生物正面，±180 表示看到背面。若左右转向与预期相反，把下方减号改成加号即可。
      */
     private fun relativeViewYaw(entity: LivingEntity): Float {
-        val cameraPosition = Minecraft.getInstance().gameRenderer.mainCamera.position()
+        val minecraft = Minecraft.getInstance()
+        val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
         val dx = cameraPosition.x - entity.x
         val dz = cameraPosition.z - entity.z
         if (dx * dx + dz * dz < 1.0e-8) return 0.0f

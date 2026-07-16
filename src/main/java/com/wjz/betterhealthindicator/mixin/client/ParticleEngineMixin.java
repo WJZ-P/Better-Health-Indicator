@@ -1,4 +1,4 @@
-package com.wjz.betterHealthIndicator.mixin.client;
+package com.wjz.betterhealthindicator.mixin.client;
 
 import com.wjz.betterhealthindicator.config.ConfigManager;
 import net.minecraft.client.particle.Particle;

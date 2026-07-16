@@ -70,6 +70,9 @@ tasks.processResources {
     filesMatching("fabric.mod.json") {
         expand(replaceProperties)
     }
+    filesMatching("better_health_indicator.mixins.json") {
+        expand(replaceProperties)
+    }
 }
 
 tasks.withType<JavaCompile>().configureEach {

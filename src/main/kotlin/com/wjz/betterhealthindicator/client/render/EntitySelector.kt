@@ -1,5 +1,6 @@
 package com.wjz.betterhealthindicator.client.render
 
+import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.wjz.betterhealthindicator.config.DisplayMode
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import net.minecraft.client.Camera
@@ -41,7 +42,7 @@ object EntitySelector {
         frustum: Frustum? = null,
     ): Frame? {
         val level = minecraft.level ?: return null
-        val camera = minecraft.gameRenderer.mainCamera
+        val camera = MinecraftCompat.mainCamera(minecraft)
         // 头顶血条的 LOOKING_AT 策略与屏幕面板都需要准星目标，故二者任一启用时都做射线拾取。
         val needLookedAt = config.displayMode == DisplayMode.LOOKING_AT || config.panelEnabled
         val lookedAt = if (needLookedAt) getLookedAtEntity(minecraft, camera, config.maxDistance) else null

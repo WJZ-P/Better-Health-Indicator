@@ -1,4 +1,4 @@
-package com.wjz.betterHealthIndicator.mixin.client;
+package com.wjz.betterhealthindicator.mixin.client;
 
 import com.wjz.betterhealthindicator.client.render.EntityHealthBarRenderer;
 import net.minecraft.client.renderer.entity.EntityRenderer;

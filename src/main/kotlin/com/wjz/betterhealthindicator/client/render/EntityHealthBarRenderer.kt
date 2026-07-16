@@ -1,5 +1,6 @@
 package com.wjz.betterhealthindicator.client.render
 
+import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.mojang.blaze3d.vertex.PoseStack
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
@@ -97,7 +98,7 @@ object EntityHealthBarRenderer {
 
     /**
      * 该实体的原版名字标签是否应被屏蔽：仅当总开关开启、头顶血条启用、本帧确实为其绘制了血条时为真。
-     * 供 [com.wjz.betterHealthIndicator.mixin.client.EntityRendererMixin] 调用（基类一处覆盖所有实体）。
+     * 供 [com.wjz.betterhealthindicator.mixin.client.EntityRendererMixin] 调用（基类一处覆盖所有实体）。
      */
     fun shouldHideVanillaName(entityId: Int): Boolean {
         val config = ConfigManager.config
@@ -171,7 +172,7 @@ object EntityHealthBarRenderer {
         if (!config.enabled || !config.headBarEnabled) return
 
         val level = minecraft.level ?: return
-        val cameraPosition = minecraft.gameRenderer.mainCamera.position()
+        val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
 
         seenEntities.clear()
         for (entity in level.entitiesForRendering()) {
@@ -191,7 +192,7 @@ object EntityHealthBarRenderer {
     /** 推进死亡破碎序列：到点的爱心碎裂为碎片并迸出彩色心粒子，全部炸完即移除序列。 */
     private fun tickDeathSequences(minecraft: Minecraft) {
         if (deathSequences.isEmpty()) return
-        val rotation = minecraft.gameRenderer.mainCamera.rotation()
+        val rotation = MinecraftCompat.mainCamera(minecraft).rotation()
         val iterator = deathSequences.iterator()
         while (iterator.hasNext()) {
             val seq = iterator.next()
@@ -227,7 +228,7 @@ object EntityHealthBarRenderer {
         val poseStack = context.poseStack()
         val collector = context.submitNodeCollector()
         val cameraState = context.levelState().cameraRenderState
-        val cameraPosition = minecraft.gameRenderer.mainCamera.position()
+        val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
 
         // 头顶血条：仅当有可显示的目标实体时绘制；正在播放 container 破碎序列的实体跳过，
         // 否则其静止的 container 会叠在抖动 container 上互相干扰。
@@ -338,7 +339,7 @@ object EntityHealthBarRenderer {
      */
     private fun flushPendingSpawns(minecraft: Minecraft, config: HealthIndicatorConfig, tickProgress: Float) {
         if (pendingSpawns.isEmpty() && pendingDeaths.isEmpty()) return
-        val rotation = minecraft.gameRenderer.mainCamera.rotation()
+        val rotation = MinecraftCompat.mainCamera(minecraft).rotation()
 
         // 死亡序列：在死亡处（与血条同基准的世界中心）固定下来，后续逐 tick 自行抖动 + 逐颗炸裂。
         for (death in pendingDeaths) {
@@ -714,7 +715,7 @@ object EntityHealthBarRenderer {
         poseStack.pushPose()
         try {
             poseStack.translate(base.x, base.y + height, base.z)
-            poseStack.mulPose(Minecraft.getInstance().gameRenderer.mainCamera.rotation())
+            poseStack.mulPose(MinecraftCompat.mainCamera(Minecraft.getInstance()).rotation())
             poseStack.scale(-scale, -scale, scale)
             block()
         } finally {
