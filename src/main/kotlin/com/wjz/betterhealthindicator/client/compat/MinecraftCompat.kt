@@ -7,6 +7,7 @@ import net.minecraft.core.Holder
 import net.minecraft.network.chat.Component
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.phys.Vec3
 import org.joml.Vector3fc
 
 /** 集中收敛 Minecraft 小版本间的名称和访问器变化。 */
@@ -35,11 +36,13 @@ object MinecraftCompat {
         //?}
     }
 
-    fun mobEffectSprite(effect: Holder<MobEffect>): BhiIdentifier {
+    fun mobEffectSprite(effect: Holder<MobEffect>): BhiMobEffectSprite {
         //? if >=26.2 {
         /*return net.minecraft.client.gui.Hud.getMobEffectSprite(effect)*/
-        //?} else {
+        //?} else if >=1.21.5 {
         return net.minecraft.client.gui.Gui.getMobEffectSprite(effect)
+        //?} else {
+        /*return Minecraft.getInstance().mobEffectTextures.get(effect)*/
         //?}
     }
 
@@ -72,6 +75,14 @@ object MinecraftCompat {
         return camera.forwardVector()
         //?} else {
         /*return camera.lookVector*/
+        //?}
+    }
+
+    fun cameraPosition(camera: Camera): Vec3 {
+        //? if >=1.21.5 {
+        return camera.position()
+        //?} else {
+        /*return camera.position*/
         //?}
     }
 }

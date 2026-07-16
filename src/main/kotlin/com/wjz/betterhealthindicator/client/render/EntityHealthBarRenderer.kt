@@ -189,7 +189,7 @@ object EntityHealthBarRenderer {
         if (!config.enabled || !config.headBarEnabled) return
 
         val level = minecraft.level ?: return
-        val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
+        val cameraPosition = MinecraftCompat.cameraPosition(MinecraftCompat.mainCamera(minecraft))
 
         seenEntities.clear()
         for (entity in level.entitiesForRendering()) {
@@ -260,7 +260,7 @@ object EntityHealthBarRenderer {
         val cameraOrientation = context.camera().rotation()
         val cullFrustum = context.frustum()*/
         //?}
-        val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
+        val cameraPosition = MinecraftCompat.cameraPosition(MinecraftCompat.mainCamera(minecraft))
 
         // 头顶血条：仅当有可显示的目标实体时绘制；正在播放 container 破碎序列的实体跳过，
         // 否则其静止的 container 会叠在抖动 container 上互相干扰。

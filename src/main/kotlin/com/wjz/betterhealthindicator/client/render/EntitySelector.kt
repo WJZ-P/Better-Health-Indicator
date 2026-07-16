@@ -46,7 +46,7 @@ object EntitySelector {
         // 头顶血条的 LOOKING_AT 策略与屏幕面板都需要准星目标，故二者任一启用时都做射线拾取。
         val needLookedAt = config.displayMode == DisplayMode.LOOKING_AT || config.panelEnabled
         val lookedAt = if (needLookedAt) getLookedAtEntity(minecraft, camera, config.maxDistance) else null
-        return Frame(minecraft, level, camera, camera.position(), lookedAt, tickProgress, config, frustum)
+        return Frame(minecraft, level, camera, MinecraftCompat.cameraPosition(camera), lookedAt, tickProgress, config, frustum)
     }
 
     fun shouldShow(entity: LivingEntity, frame: Frame): Boolean {
@@ -104,7 +104,7 @@ object EntitySelector {
 
     private fun getLookedAtEntity(minecraft: Minecraft, camera: Camera, maxDistance: Double): LivingEntity? {
         val viewer = minecraft.cameraEntity ?: return null
-        val eye = camera.position()
+        val eye = MinecraftCompat.cameraPosition(camera)
         val forward = MinecraftCompat.cameraForward(camera)
         val reach = Vec3(forward.x().toDouble(), forward.y().toDouble(), forward.z().toDouble()).scale(maxDistance)
         val end = eye.add(reach)
@@ -135,7 +135,7 @@ object EntitySelector {
 
     /** 点积圆锥粗筛兜底：比较视线方向与“指向实体方向”的夹角是否落在 FOV 内。 */
     private fun isInViewCone(camera: Camera, entityPosition: Vec3): Boolean {
-        val cameraPosition = camera.position()
+        val cameraPosition = MinecraftCompat.cameraPosition(camera)
         val toEntity: Vec3 = entityPosition.subtract(cameraPosition)
         val length = toEntity.length() // 实体距离太近会触发除 0，直接判定可见。
         if (length < 1.0e-4) return true

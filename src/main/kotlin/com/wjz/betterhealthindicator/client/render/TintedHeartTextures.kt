@@ -125,7 +125,11 @@ object TintedHeartTextures {
             }
         }
         val id = Identifier.fromNamespaceAndPath("better_health_indicator", "tinted_heart/$name")
+        //? if >=1.21.5 {
         Minecraft.getInstance().textureManager.register(id, DynamicTexture(Supplier { "bhi/$name" }, image))
+        //?} else {
+        /*Minecraft.getInstance().textureManager.register(id, DynamicTexture(image))*/
+        //?}
         return id
     }
 

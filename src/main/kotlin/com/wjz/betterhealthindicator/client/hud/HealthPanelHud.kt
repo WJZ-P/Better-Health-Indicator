@@ -3,19 +3,24 @@ package com.wjz.betterhealthindicator.client.hud
 import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.wjz.betterhealthindicator.client.compat.BhiGuiGraphics
 import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.bhiBlitMobEffectSprite
+import com.wjz.betterhealthindicator.client.compat.bhiBlitSprite
+import com.wjz.betterhealthindicator.client.compat.bhiBlitTexture
 import com.wjz.betterhealthindicator.client.compat.bhiEntity
 import com.wjz.betterhealthindicator.client.compat.bhiOutline
+import com.wjz.betterhealthindicator.client.compat.bhiPopPose
+import com.wjz.betterhealthindicator.client.compat.bhiPushPose
+import com.wjz.betterhealthindicator.client.compat.bhiScale
 import com.wjz.betterhealthindicator.client.compat.bhiText
+import com.wjz.betterhealthindicator.client.compat.bhiTranslate
+import com.wjz.betterhealthindicator.client.compat.registerBhiHud
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.GLOSS_CELL
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.NAME_COLOR
 import com.wjz.betterhealthindicator.client.render.*
 import com.wjz.betterhealthindicator.config.*
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.core.Holder
 import net.minecraft.network.chat.Component
@@ -31,8 +36,7 @@ import kotlin.math.min
 /**
  * 屏幕角落血量面板：框 + 关注生物的实时 3D 模型 + 名字与血量信息。
  *
- * 通过 Fabric [HudElementRegistry] 注册，在 HUD 提取阶段（[HudElement.extractRenderState]）绘制，
- * 实体模型复用原版 [InventoryScreen.extractEntityInInventoryFollowsMouse]。
+ * 通过 Fabric HUD 图层 API 注册；实体模型复用原版物品栏实体渲染流程。
  */
 object HealthPanelHud {
     private const val PANEL_WIDTH_DEFAULT = 120 // 面板默认/最小宽度
@@ -147,19 +151,18 @@ object HealthPanelHud {
     private const val FOOTPRINT_DIAGONAL = 1.41421356f
 
     fun register() {
-        HudElementRegistry.addLast(
+        registerBhiHud(
             Identifier.fromNamespaceAndPath("better_health_indicator", "health_panel"),
-            HudElement { graphics, delta ->
+        ) render@ { graphics, tickProgress ->
                 val config = ConfigManager.config
-                if (!config.enabled || !config.panelEnabled) return@HudElement
+                if (!config.enabled || !config.panelEnabled) return@render
 
                 val minecraft = Minecraft.getInstance()
-                if (MinecraftCompat.isHudHidden(minecraft)) return@HudElement
+                if (MinecraftCompat.isHudHidden(minecraft)) return@render
 
-                val tickProgress = delta.getGameTimeDeltaPartialTick(false)
-                val frame = EntitySelector.buildFrame(minecraft, config, tickProgress) ?: return@HudElement
+                val frame = EntitySelector.buildFrame(minecraft, config, tickProgress) ?: return@render
                 // 优先准星目标；都没有时，最低优先级兜底显示有效期内的“最近受击生物”。
-                val target = EntitySelector.pickPanelTarget(frame) ?: pickAttackedFallback(frame) ?: return@HudElement
+                val target = EntitySelector.pickPanelTarget(frame) ?: pickAttackedFallback(frame) ?: return@render
 
                 val font = minecraft.font
                 val bold = config.panelTextBold
@@ -232,8 +235,7 @@ object HealthPanelHud {
                     val contentWidth = panelWidth - contentLeft - CONTENT_RIGHT_PAD
                     drawEffects(graphics, font, textX, barY1 + 1, effects, contentWidth)
                 }
-            },
-        )
+        }
         BetterHealthIndicatorLogger.info("Health panel HUD registered.")
     }
 
@@ -348,10 +350,10 @@ object HealthPanelHud {
     /** 绘制单个状态效果：先铺背板(container，ambient 用专属背板)，再居中叠 mob_effect/<id> 图标。 */
     private fun drawEffectIcon(graphics: BhiGuiGraphics, display: EffectDisplay, x: Int, y: Int) {
         val background = if (display.ambient) EFFECT_BG_AMBIENT_SPRITE else EFFECT_BG_SPRITE
-        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, background, x, y, EFFECT_BG_SIZE, EFFECT_BG_SIZE)
+        graphics.bhiBlitSprite(background, x, y, EFFECT_BG_SIZE, EFFECT_BG_SIZE)
         val sprite = MinecraftCompat.mobEffectSprite(display.effect)
-        graphics.blitSprite(
-            RenderPipelines.GUI_TEXTURED, sprite,
+        graphics.bhiBlitMobEffectSprite(
+            sprite,
             x + EFFECT_ICON_INSET, y + EFFECT_ICON_INSET, EFFECT_ICON_SIZE, EFFECT_ICON_SIZE,
         )
     }
@@ -382,7 +384,7 @@ object HealthPanelHud {
             val x = x0 + i * HEART_STEP
             // 残血濒死：每颗心独立、相邻反相的垂直抖动（与头顶共用逻辑）。
             val topY = top + LowHealthShake.verticalOffset(entityId, i, health, maxHealth, config).toInt()
-            graphics.blitSprite(RenderPipelines.GUI_TEXTURED, container, x, topY, HEART_SIZE, HEART_SIZE)
+            graphics.bhiBlitSprite(container, x, topY, HEART_SIZE, HEART_SIZE)
             // 分层时空出的顶层揭示下一层满心作底，而非黑底；底层是否极限模式独立于顶层。
             slot.baseTier?.let {
                 drawGuiHeart(graphics, it.guiFullFor(view.baseHardcore), x, topY)
@@ -392,12 +394,11 @@ object HealthPanelHud {
                     drawGuiHeart(graphics, slot.topTier.guiFullFor(view.topHardcore), x, topY)
                 // 半心填充侧跟随掉血方向：从右往左扣→左半（原版默认 sprite）；从左往右扣→水平镜像成右半。
                 HeartLayout.Top.HALF -> if (mirrorHalf) {
-                    val pose = graphics.pose()
-                    pose.pushMatrix()
-                    pose.translate((2 * x + HEART_SIZE).toFloat(), 0.0f)
-                    pose.scale(-1.0f, 1.0f)
+                    graphics.bhiPushPose()
+                    graphics.bhiTranslate((2 * x + HEART_SIZE).toFloat(), 0.0f)
+                    graphics.bhiScale(-1.0f, 1.0f)
                     drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, topY)
-                    pose.popMatrix()
+                    graphics.bhiPopPose()
                 } else {
                     drawGuiHeart(graphics, slot.topTier.guiHalfFor(view.topHardcore), x, topY)
                 }
@@ -416,10 +417,9 @@ object HealthPanelHud {
     private fun drawGuiHeart(graphics: BhiGuiGraphics, heart: HeartGraphics.GuiHeart, x: Int, top: Int) {
         when (heart) {
             is HeartGraphics.GuiHeart.Sprite ->
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, heart.sprite, x, top, HEART_SIZE, HEART_SIZE)
+                graphics.bhiBlitSprite(heart.sprite, x, top, HEART_SIZE, HEART_SIZE)
             is HeartGraphics.GuiHeart.Texture ->
-                graphics.blit(
-                    RenderPipelines.GUI_TEXTURED,
+                graphics.bhiBlitTexture(
                     heart.texture,
                     x,
                     top,
@@ -478,7 +478,7 @@ object HealthPanelHud {
         val rotation = Quaternionf().rotateZ(Mth.PI) //  这里Z轴转一百八，不然渲染出来是倒立的
         val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Mth.PI / 180.0f))
         rotation.mul(cameraTilt)
-        graphics.bhiEntity(renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
+        graphics.bhiEntity(entity, renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
     }
 
     /**
@@ -487,7 +487,7 @@ object HealthPanelHud {
      */
     private fun relativeViewYaw(entity: LivingEntity): Float {
         val minecraft = Minecraft.getInstance()
-        val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
+        val cameraPosition = MinecraftCompat.cameraPosition(MinecraftCompat.mainCamera(minecraft))
         val dx = cameraPosition.x - entity.x
         val dz = cameraPosition.z - entity.z
         if (dx * dx + dz * dz < 1.0e-8) return 0.0f
@@ -516,7 +516,7 @@ object HealthPanelHud {
         return when (shape) {
             //  方形框：直接绘制手绘贴图 better_health_indicator:frame/square
             PanelFrameShape.SQUARE -> {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FRAME_SQUARE_SPRITE, x0, y0, size, y1 - y0)
+                graphics.bhiBlitSprite(FRAME_SQUARE_SPRITE, x0, y0, size, y1 - y0)
                 // 模型框按贴图边框比例内缩，避免模型压到边框。
                 val inset = borderPx.coerceAtLeast(2)
                 intArrayOf(x0 + inset, y0 + inset, x1 - inset, y1 - inset)
@@ -524,7 +524,7 @@ object HealthPanelHud {
 
             //  圆形框：直接绘制手绘贴图 better_health_indicator:frame/round
             PanelFrameShape.CIRCLE -> {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED, FRAME_ROUND_SPRITE, x0, y0, size, y1 - y0)
+                graphics.bhiBlitSprite(FRAME_ROUND_SPRITE, x0, y0, size, y1 - y0)
                 val radius = size / 2
                 val cx = x0 + radius
                 val cy = y0 + radius
@@ -591,12 +591,11 @@ object HealthPanelHud {
         val tw = font.width(text)
         val centerX = (x0 + x1) / 2f
         val centerY = (y0 + y1) / 2f
-        val pose = graphics.pose()
-        pose.pushMatrix()
-        pose.translate(centerX - tw * s / 2f, centerY - font.lineHeight * s / 2f)
-        pose.scale(s, s)
+        graphics.bhiPushPose()
+        graphics.bhiTranslate(centerX - tw * s / 2f, centerY - font.lineHeight * s / 2f)
+        graphics.bhiScale(s, s)
         graphics.bhiText(font, text, 0, 0, HEALTH_NUM_TEXT, true)
-        pose.popMatrix()
+        graphics.bhiPopPose()
     }
 
     /**
