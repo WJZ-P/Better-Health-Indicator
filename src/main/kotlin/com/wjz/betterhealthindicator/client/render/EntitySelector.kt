@@ -105,7 +105,7 @@ object EntitySelector {
     private fun getLookedAtEntity(minecraft: Minecraft, camera: Camera, maxDistance: Double): LivingEntity? {
         val viewer = minecraft.cameraEntity ?: return null
         val eye = camera.position()
-        val forward = camera.forwardVector()
+        val forward = MinecraftCompat.cameraForward(camera)
         val reach = Vec3(forward.x().toDouble(), forward.y().toDouble(), forward.z().toDouble()).scale(maxDistance)
         val end = eye.add(reach)
         val searchBox = viewer.boundingBox.expandTowards(reach).inflate(1.0)
@@ -140,7 +140,7 @@ object EntitySelector {
         val length = toEntity.length() // 实体距离太近会触发除 0，直接判定可见。
         if (length < 1.0e-4) return true
 
-        val forward = camera.forwardVector()
+        val forward = MinecraftCompat.cameraForward(camera)
         val dot = (forward.x() * toEntity.x + forward.y() * toEntity.y + forward.z() * toEntity.z) / length
         val fovDegrees = Minecraft.getInstance().options.fov().get().toDouble()
         val threshold = cos(Math.toRadians(fovDegrees))

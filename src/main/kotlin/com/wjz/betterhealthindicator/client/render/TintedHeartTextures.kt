@@ -1,10 +1,10 @@
 package com.wjz.betterhealthindicator.client.render
 
+import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
 import com.mojang.blaze3d.platform.NativeImage
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.texture.DynamicTexture
-import net.minecraft.resources.Identifier
 import java.util.function.Supplier
 
 /**

@@ -21,7 +21,7 @@
 &nbsp;
 <a href="https://github.com/WJZ-P/Better-Health-Indicator/blob/main/LICENSE"><img src="https://img.shields.io/github/license/WJZ-P/Better-Health-Indicator.svg?style=flat-square" alt="License"></a>
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.1.2%20%7C%2026.2-brightgreen?style=flat-square)](https://www.minecraft.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21.8%20%7C%201.21.11%20%7C%2026.1.2%20%7C%2026.2-brightgreen?style=flat-square)](https://www.minecraft.net/)
 [![Fabric](https://img.shields.io/badge/Loader-Fabric-blue?style=flat-square)](https://fabricmc.net/)
 [![Environment](https://img.shields.io/badge/Env-客户端-orange?style=flat-square)](#)
 
@@ -86,7 +86,7 @@ https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
    - [Mod Menu](https://modrinth.com/mod/modmenu)
    - [Cloth Config](https://modrinth.com/mod/cloth-config)
 
-**环境要求**：Minecraft **26.1.2 或 26.2**、Java **25+**。
+**环境要求**：Minecraft **1.21.8 / 1.21.11** 需要 Java **21+**；Minecraft **26.1.2 / 26.2** 需要 Java **25+**。
 
 ---
 
@@ -117,7 +117,7 @@ https://github.com/user-attachments/assets/dc8e73e8-1f7a-4f0c-8878-5751be728ebe
 ## 🧩 兼容性
 
 - 加载器：**Fabric**
-- 版本：**Minecraft 26.1.2、26.2**
+- 版本：**Minecraft 1.21.8、1.21.11、26.1.2、26.2**
 - 纯客户端，不影响存档与服务器。
 
 ---

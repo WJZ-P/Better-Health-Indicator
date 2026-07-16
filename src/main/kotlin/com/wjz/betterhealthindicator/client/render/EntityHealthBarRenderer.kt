@@ -1,26 +1,27 @@
 package com.wjz.betterhealthindicator.client.render
 
 import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
+import com.wjz.betterhealthindicator.client.compat.BhiWorldRenderContext
+import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.BhiWorldCollector
+import com.wjz.betterhealthindicator.client.compat.bhiEntityCutout
+import com.wjz.betterhealthindicator.client.compat.bhiSubmitGeometry
+import com.wjz.betterhealthindicator.client.compat.bhiSubmitText
 import com.mojang.blaze3d.vertex.PoseStack
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext
-import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.Font
-import net.minecraft.client.renderer.SubmitNodeCollector
-import net.minecraft.client.renderer.rendertype.RenderTypes
-import net.minecraft.client.renderer.state.level.CameraRenderState
+import net.minecraft.client.renderer.culling.Frustum
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
-import net.minecraft.resources.Identifier
-import net.minecraft.util.LightCoordsUtil
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
 import org.joml.Vector3f
+import org.joml.Quaternionf
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -29,9 +30,9 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * 生物头顶血量渲染。在 26.1 的 [LevelRenderEvents.COLLECT_SUBMITS] 阶段提交几何与文本：
- * - 图形（条 / 爱心）通过 [SubmitNodeCollector.submitCustomGeometry] 提交；
- * - 文本（名字 / 数值）通过 [SubmitNodeCollector.submitText] 自绘提交（自行 billboard 并按字号倍率缩放）。
+ * 生物头顶血量渲染。在 Fabric 世界渲染事件中提交几何与文本：
+ * - 图形（条 / 爱心）通过兼容层提交到当前版本的世界渲染缓冲；
+ * - 文本（名字 / 数值）通过兼容层自绘提交（自行 billboard 并按字号倍率缩放）。
  *
  * 同时检测生物掉血并交由 [HeartParticleManager] 生成掉落爱心粒子。
  */
@@ -151,14 +152,30 @@ object EntityHealthBarRenderer {
 
     private val pendingDeaths = ArrayList<PendingDeath>()
     private val deathSequences = ArrayList<DeathSequence>()
+    private var legacyCullFrustum: Frustum? = null
 
     /** 爱心层中的一片待绘四边形：槽位中心 X + 是否水平翻转（决定半心填充侧）+ 竖直偏移（抖动用）。 */
     private class HeartQuad(val cx: Float, val flipU: Boolean, val cy: Float = 0.0f, val rot: Float = 0.0f)
 
     fun register() {
-        LevelRenderEvents.COLLECT_SUBMITS.register(
-            LevelRenderEvents.CollectSubmits { context -> collect(context) },
+        //? if >=26.1 {
+        net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.COLLECT_SUBMITS.register(
+            net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.CollectSubmits { context -> collect(context) },
         )
+        //?} else if >=1.21.9 {
+        /*net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_EXTRACTION.register(
+            net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.EndExtraction { context ->
+                legacyCullFrustum = context.frustum()
+            },
+        )
+        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES.register(
+            net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AfterEntities { context -> collect(context) },
+        )*/
+        //?} else {
+        /*net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_ENTITIES.register(
+            net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AfterEntities { context -> collect(context) },
+        )*/
+        //?}
         // 掉血检测属于游戏状态采样，放在固定 20Hz 的客户端 tick，避免随帧率空转，并与渲染职责分离。
         ClientTickEvents.END_CLIENT_TICK.register(
             ClientTickEvents.EndTick { minecraft -> tickDamageDetection(minecraft) },
@@ -212,7 +229,7 @@ object EntityHealthBarRenderer {
         }
     }
 
-    private fun collect(context: LevelRenderContext) {
+    private fun collect(context: BhiWorldRenderContext) {
         // 先清空本帧的「已显示血条」集合：即便后续提前返回（功能关闭等），也能让名字标签屏蔽随之失效。
         headBarShownThisFrame.clear()
 
@@ -225,21 +242,36 @@ object EntityHealthBarRenderer {
         // 在渲染帧解析本 tick 的待生成粒子，确保与血条爱心同基准、同帧、像素级重合（须先于可能的提前返回执行，避免堆积）。
         flushPendingSpawns(minecraft, config, tickProgress)
 
+        //? if >=26.1 {
         val poseStack = context.poseStack()
         val collector = context.submitNodeCollector()
         val cameraState = context.levelState().cameraRenderState
+        val cameraOrientation = cameraState.orientation
+        val cullFrustum = cameraState.cullFrustum
+        //?} else if >=1.21.9 {
+        /*val poseStack = context.matrices()
+        val collector = context.commandQueue()
+        val cameraState = context.worldState().cameraRenderState
+        val cameraOrientation = cameraState.orientation
+        val cullFrustum = legacyCullFrustum*/
+        //?} else {
+        /*val poseStack = context.matrixStack() ?: return
+        val collector = context.consumers() ?: return
+        val cameraOrientation = context.camera().rotation()
+        val cullFrustum = context.frustum()*/
+        //?}
         val cameraPosition = MinecraftCompat.mainCamera(minecraft).position()
 
         // 头顶血条：仅当有可显示的目标实体时绘制；正在播放 container 破碎序列的实体跳过，
         // 否则其静止的 container 会叠在抖动 container 上互相干扰。
-        val frame = EntitySelector.buildFrame(minecraft, config, tickProgress, cameraState.cullFrustum)
+        val frame = EntitySelector.buildFrame(minecraft, config, tickProgress, cullFrustum)
         if (frame != null) {
             for (entity in frame.level.entitiesForRendering()) {
                 if (entity !is LivingEntity) continue
                 if (isDying(entity.id)) continue
                 if (EntitySelector.shouldShow(entity, frame)) {
                     headBarShownThisFrame.add(entity.id)
-                    submit(entity, frame, collector, poseStack, cameraState)
+                    submit(entity, frame, collector, poseStack, cameraOrientation)
                 }
             }
         }
@@ -249,7 +281,7 @@ object EntityHealthBarRenderer {
             renderDeathSequences(collector, poseStack, cameraPosition, tickProgress)
         }
         if (!HeartParticleManager.isEmpty()) {
-            HeartParticleManager.render(collector, poseStack, cameraPosition, cameraState.orientation, tickProgress)
+            HeartParticleManager.render(collector, poseStack, cameraPosition, cameraOrientation, tickProgress)
         }
     }
 
@@ -416,9 +448,9 @@ object EntityHealthBarRenderer {
     private fun submit(
         entity: LivingEntity,
         frame: EntitySelector.Frame,
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
-        cameraState: CameraRenderState,
+        cameraOrientation: Quaternionf,
     ) {
         val config = frame.config
         val cameraPosition = frame.cameraPosition
@@ -460,8 +492,9 @@ object EntityHealthBarRenderer {
 
         val segments = ArrayList<TextSegment>(3)
         if (config.showName) {
+            val displayName = MinecraftCompat.displayName(entity)
             val nameComp: Component =
-                if (config.textBold) entity.displayName.copy().withStyle(ChatFormatting.BOLD) else entity.displayName
+                if (config.textBold) displayName.copy().withStyle(ChatFormatting.BOLD) else displayName
             segments.add(TextSegment(nameComp, nameScale))
         }
         // 未启用「血条右侧」时，详情用彩色「|」接在名字行尾部（原行为）。
@@ -472,13 +505,13 @@ object EntityHealthBarRenderer {
             segments.add(detailSegment)
         }
         if (segments.isNotEmpty()) {
-            submitTextLine(collector, poseStack, base, barHeight + LINE_GAP * 2.5, segments, config, cameraState)
+            submitTextLine(collector, poseStack, base, barHeight + LINE_GAP * 2.5, segments, config, cameraOrientation)
         }
         // 「血条右侧」详情：与血条同高，左对齐贴在血条右边缘外（爱心/血条本身仍居中）。
         if (detailBesideBar && detailSegment != null) {
             val barRightLocal = barRightLocalEdge(entity, config)
             val leftR = config.scale * (barRightLocal + DETAIL_BAR_GAP)
-            submitTextLine(collector, poseStack, base, barHeight, listOf(detailSegment), config, cameraState, anchorLeftR = leftR)
+            submitTextLine(collector, poseStack, base, barHeight, listOf(detailSegment), config, cameraOrientation, anchorLeftR = leftR)
         }
     }
 
@@ -527,13 +560,13 @@ object EntityHealthBarRenderer {
      * 各段按世界宽度水平拼接并整体居中，并按行高在垂直方向居中对齐。
      */
     private fun submitTextLine(
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
         base: Vec3,
         localY: Double,
         segments: List<TextSegment>,
         config: HealthIndicatorConfig,
-        cameraState: CameraRenderState,
+        cameraOrientation: Quaternionf,
         anchorLeftR: Float? = null,
     ) {
         val font = Minecraft.getInstance().font
@@ -548,19 +581,20 @@ object EntityHealthBarRenderer {
             poseStack.pushPose()
             try {
                 poseStack.translate(base.x, base.y + localY, base.z)
-                poseStack.mulPose(cameraState.orientation)
+                poseStack.mulPose(cameraOrientation)
                 // 在 billboard 空间内沿世界单位推进笔位（左边缘），并上移半个行高做垂直居中。
                 poseStack.translate(penWorld.toDouble(), halfHeight.toDouble(), 0.0)
                 // 仅翻转 Y；X 必须保持正，否则四边形绕序反转被字体渲染剔除。
                 poseStack.scale(seg.scale, -seg.scale, seg.scale)
-                collector.submitText(
+                collector.bhiSubmitText(
+                    font,
                     poseStack,
                     0.0f,
                     0.0f,
                     seg.text.visualOrderText,
                     true,
                     displayMode,
-                    LightCoordsUtil.FULL_BRIGHT,
+                    MinecraftCompat.fullBright(),
                     WHITE,
                     0,
                     0,
@@ -574,7 +608,7 @@ object EntityHealthBarRenderer {
 
     /** 提交头顶爱心血条，返回需要标注的「血量管数」倍数（0 表示无需标注）。 */
     private fun submitHearts(
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
         base: Vec3,
         height: Double,
@@ -625,7 +659,7 @@ object EntityHealthBarRenderer {
     }
 
     private fun drawHeartLayer(
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
         groups: Map<Identifier, MutableList<HeartQuad>>,
         halfSize: Float,
@@ -633,7 +667,7 @@ object EntityHealthBarRenderer {
     ) {
         for ((texture, quads) in groups) {
             if (quads.isEmpty()) continue
-            collector.submitCustomGeometry(poseStack, RenderTypes.entityCutout(texture)) { pose, consumer ->
+            collector.bhiSubmitGeometry(poseStack, bhiEntityCutout(texture)) { pose, consumer ->
                 val m = pose.pose()
                 for (q in quads) {
                     HeartGraphics.quadRotated(consumer, m, q.cx, q.cy, halfSize, WHITE, q.rot, q.flipU, z)
@@ -684,7 +718,7 @@ object EntityHealthBarRenderer {
 
     /** 渲染所有进行中的 container 破碎序列：未炸裂的 container 在原位高频抖动，已炸裂的让位给碎片。 */
     private fun renderDeathSequences(
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
         cameraPosition: Vec3,
         partialTick: Float,

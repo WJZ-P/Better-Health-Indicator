@@ -1,9 +1,9 @@
 package com.wjz.betterhealthindicator.client.render
 
 import com.mojang.blaze3d.vertex.VertexConsumer
+import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
+import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
 import net.minecraft.client.renderer.texture.OverlayTexture
-import net.minecraft.resources.Identifier
-import net.minecraft.util.LightCoordsUtil
 import org.joml.Matrix4f
 import kotlin.math.cos
 import kotlin.math.sin
@@ -209,7 +209,7 @@ object HeartGraphics {
             .setColor(color)
             .setUv(u, v)
             .setOverlay(OverlayTexture.NO_OVERLAY)
-            .setLight(LightCoordsUtil.FULL_BRIGHT)
+            .setLight(MinecraftCompat.fullBright())
             .setNormal(0.0f, 0.0f, 1.0f)
     }
 }

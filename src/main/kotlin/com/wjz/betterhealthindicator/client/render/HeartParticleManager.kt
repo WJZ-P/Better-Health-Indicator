@@ -1,9 +1,10 @@
 package com.wjz.betterhealthindicator.client.render
 
+import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.BhiWorldCollector
+import com.wjz.betterhealthindicator.client.compat.bhiEntityTranslucent
+import com.wjz.betterhealthindicator.client.compat.bhiSubmitGeometry
 import com.mojang.blaze3d.vertex.PoseStack
-import net.minecraft.client.renderer.SubmitNodeCollector
-import net.minecraft.client.renderer.rendertype.RenderTypes
-import net.minecraft.resources.Identifier
 import net.minecraft.world.phys.Vec3
 import org.joml.Quaternionf
 import org.joml.Vector3f
@@ -320,7 +321,7 @@ object HeartParticleManager {
     fun isEmpty(): Boolean = particles.isEmpty() && shards.isEmpty()
 
     fun render(
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
         cameraPosition: Vec3,
         cameraOrientation: Quaternionf,
@@ -364,7 +365,7 @@ object HeartParticleManager {
                 // 在 billboard 局部空间施加摆动与倾斜：横向平移恒为屏幕水平，倾斜绕屏幕法线，读作“晃动/抖动”。
                 poseStack.translate(swayLocal.toDouble(), 0.0, 0.0)
                 poseStack.mulPose(Quaternionf().rotationZ(tiltRad))
-                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(texture)) { pose, consumer ->
+                collector.bhiSubmitGeometry(poseStack, bhiEntityTranslucent(texture)) { pose, consumer ->
                     HeartGraphics.quad(consumer, pose.pose(), -halfSize, -halfSize, halfSize, halfSize, color, p.flipU)
                 }
             } finally {
@@ -376,7 +377,7 @@ object HeartParticleManager {
     }
 
     private fun renderShards(
-        collector: SubmitNodeCollector,
+        collector: BhiWorldCollector,
         poseStack: PoseStack,
         cameraPosition: Vec3,
         cameraOrientation: Quaternionf,
@@ -408,7 +409,7 @@ object HeartParticleManager {
                 poseStack.mulPose(cameraOrientation)
                 poseStack.mulPose(Quaternionf().rotationZ(rot)) // 翻滚自旋
                 poseStack.scale(-SCALE, -SCALE, SCALE)
-                collector.submitCustomGeometry(poseStack, RenderTypes.entityTranslucent(s.texture)) { pose, consumer ->
+                collector.bhiSubmitGeometry(poseStack, bhiEntityTranslucent(s.texture)) { pose, consumer ->
                     HeartGraphics.quadUv(consumer, pose.pose(), -h, -h, h, h, s.u0, s.v0, s.u1, s.v1, color)
                 }
             } finally {

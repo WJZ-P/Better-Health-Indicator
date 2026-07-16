@@ -1,6 +1,11 @@
 package com.wjz.betterhealthindicator.client.hud
 
 import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
+import com.wjz.betterhealthindicator.client.compat.BhiGuiGraphics
+import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.bhiEntity
+import com.wjz.betterhealthindicator.client.compat.bhiOutline
+import com.wjz.betterhealthindicator.client.compat.bhiText
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.GLOSS_CELL
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.NAME_COLOR
@@ -10,12 +15,10 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
 import net.minecraft.core.Holder
 import net.minecraft.network.chat.Component
-import net.minecraft.resources.Identifier
 import net.minecraft.util.Mth
 import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.entity.LivingEntity
@@ -160,11 +163,12 @@ object HealthPanelHud {
 
                 val font = minecraft.font
                 val bold = config.panelTextBold
+                val targetName = MinecraftCompat.displayName(target)
                 // 文本区左沿相对面板左沿的偏移：内边距 + 模型框 + 间隙。
                 val contentLeft = PADDING + FRAME_SIZE + 6
                 // 面板宽度随名字完整宽度在「默认~最大」间自适应；超出最大宽度的名字会被省略。
                 val fullNameWidth =
-                    font.width(if (bold) target.displayName.copy().withStyle(ChatFormatting.BOLD) else target.displayName)
+                    font.width(if (bold) targetName.copy().withStyle(ChatFormatting.BOLD) else targetName)
                 // 心形样式：预先算好布局，使面板宽度能容纳整排爱心。
                 val heartsView = if (config.panelBarStyle == PanelBarStyle.HEARTS)
                     HeartLayout.compute(target.health, target.maxHealth, config) else null
@@ -181,7 +185,7 @@ object HealthPanelHud {
                     maxOf(nameNeed, effectsNeed).coerceIn(PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX)
                 }
                 val maxNameWidth = panelWidth - contentLeft - CONTENT_RIGHT_PAD
-                val nameText = fitName(font, target.displayName, bold, maxNameWidth)
+                val nameText = fitName(font, targetName, bold, maxNameWidth)
 
                 val panelX = when (config.panelCorner) {
                     PanelCorner.TOP_LEFT -> MARGIN
@@ -208,7 +212,7 @@ object HealthPanelHud {
                 val hasEffects = effects.isNotEmpty()
                 val nameY = panelY + if (hasEffects) 4 else 6
                 val barY0 = panelY + if (hasEffects) 13 else 22
-                graphics.text(font, nameText, textX, nameY, NAME_COLOR, true)
+                graphics.bhiText(font, nameText, textX, nameY, NAME_COLOR, true)
 
                 val barX0 = textX
                 val barX1 = panelX + panelWidth - PADDING - 4
@@ -319,7 +323,7 @@ object HealthPanelHud {
      * 全部放得下则逐个绘制；否则尽量多放图标，并在末尾以「+N」标注未显示的剩余数量。
      */
     private fun drawEffects(
-        graphics: GuiGraphicsExtractor,
+        graphics: BhiGuiGraphics,
         font: net.minecraft.client.gui.Font,
         x0: Int,
         y: Int,
@@ -338,11 +342,11 @@ object HealthPanelHud {
         while (k > 0 && k * EFFECT_STEP + font.width("+${n - k}") > maxWidth) k--
         for (i in 0 until k) drawEffectIcon(graphics, effects[i], x0 + i * EFFECT_STEP, y)
         val label = Component.literal("+${n - k}")
-        graphics.text(font, label, x0 + k * EFFECT_STEP, y + (EFFECT_BG_SIZE - font.lineHeight) / 2, NAME_COLOR, true)
+        graphics.bhiText(font, label, x0 + k * EFFECT_STEP, y + (EFFECT_BG_SIZE - font.lineHeight) / 2, NAME_COLOR, true)
     }
 
     /** 绘制单个状态效果：先铺背板(container，ambient 用专属背板)，再居中叠 mob_effect/<id> 图标。 */
-    private fun drawEffectIcon(graphics: GuiGraphicsExtractor, display: EffectDisplay, x: Int, y: Int) {
+    private fun drawEffectIcon(graphics: BhiGuiGraphics, display: EffectDisplay, x: Int, y: Int) {
         val background = if (display.ambient) EFFECT_BG_AMBIENT_SPRITE else EFFECT_BG_SPRITE
         graphics.blitSprite(RenderPipelines.GUI_TEXTURED, background, x, y, EFFECT_BG_SIZE, EFFECT_BG_SIZE)
         val sprite = MinecraftCompat.mobEffectSprite(display.effect)
@@ -357,7 +361,7 @@ object HealthPanelHud {
      * [blinking] 为 true 时心容器外圈用 container_blinking（白圈），还原原版受击/回血高亮。
      */
     private fun drawHearts(
-        graphics: GuiGraphicsExtractor,
+        graphics: BhiGuiGraphics,
         font: net.minecraft.client.gui.Font,
         x0: Int,
         centerY: Int,
@@ -404,12 +408,12 @@ object HealthPanelHud {
             val label = Component.literal("× ${view.multiplier}")
             // 与头顶一致：按倍数分档着色（补足不透明 alpha）。
             val color = 0xFF000000.toInt() or HeartLayout.multiplierColor(view.multiplier)
-            graphics.text(font, label, x0 + ordered.size * HEART_STEP + 2, centerY - font.lineHeight / 2, color, true)
+            graphics.bhiText(font, label, x0 + ordered.size * HEART_STEP + 2, centerY - font.lineHeight / 2, color, true)
         }
     }
 
     /** 绘制一颗心：原版心走 GUI 图集 blitSprite，染色心走独立贴图 blit。 */
-    private fun drawGuiHeart(graphics: GuiGraphicsExtractor, heart: HeartGraphics.GuiHeart, x: Int, top: Int) {
+    private fun drawGuiHeart(graphics: BhiGuiGraphics, heart: HeartGraphics.GuiHeart, x: Int, top: Int) {
         when (heart) {
             is HeartGraphics.GuiHeart.Sprite ->
                 graphics.blitSprite(RenderPipelines.GUI_TEXTURED, heart.sprite, x, top, HEART_SIZE, HEART_SIZE)
@@ -430,7 +434,7 @@ object HealthPanelHud {
     }
 
     private fun renderEntityModel(
-        graphics: GuiGraphicsExtractor,
+        graphics: BhiGuiGraphics,
         entity: LivingEntity,
         x0: Int,
         y0: Int,
@@ -439,8 +443,10 @@ object HealthPanelHud {
     ) {
         val dispatcher = Minecraft.getInstance().entityRenderDispatcher
         val renderState = dispatcher.getRenderer(entity).createRenderState(entity, 1.0f)
+        //? if >=1.21.9 {
         renderState.shadowPieces.clear()
         renderState.outlineColor = 0
+        //?}
         if (renderState is LivingEntityRenderState) {
             // bodyRot：身体绝对朝向，跟随“玩家相对生物的水平视角”，使绕行时面板显示对应侧面/背面。
             // yRot：原版语义为“头相对身体的扭转量并取负”（0 即对齐），故只放头自身扭转，绝不能混入身体朝向。
@@ -472,7 +478,7 @@ object HealthPanelHud {
         val rotation = Quaternionf().rotateZ(Mth.PI) //  这里Z轴转一百八，不然渲染出来是倒立的
         val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Mth.PI / 180.0f))
         rotation.mul(cameraTilt)
-        graphics.entity(renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
+        graphics.bhiEntity(renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
     }
 
     /**
@@ -496,7 +502,7 @@ object HealthPanelHud {
      * 圆形采用扫描线程序绘制（无需贴图）；模型内框取内切正方形，确保模型不溢出圆外。
      */
     private fun drawModelFrame(
-        graphics: GuiGraphicsExtractor,
+        graphics: BhiGuiGraphics,
         theme: Theme,
         shape: PanelFrameShape,
         x0: Int,
@@ -530,10 +536,10 @@ object HealthPanelHud {
     }
 
     /** 面板背景：半透明深色底（竖向渐变）+ 最外深色描边 + 内一圈外凸 bevel，营造原版风格立体质感。 */
-    private fun drawPanelBackground(graphics: GuiGraphicsExtractor, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
+    private fun drawPanelBackground(graphics: BhiGuiGraphics, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
         graphics.fillGradient(x0, y0, x1, y1, theme.bgTop, theme.bgBottom)
         // 注意：outline 参数是 (x, y, 宽, 高)，与 fill 的 (左, 上, 右, 下) 语义不同。
-        graphics.outline(x0, y0, x1 - x0, y1 - y0, theme.border)
+        graphics.bhiOutline(x0, y0, x1 - x0, y1 - y0, theme.border)
         // 内一圈：顶/左高光、底/右阴影 → 外凸立体感。
         graphics.fill(x0 + 1, y0 + 1, x1 - 1, y0 + 2, theme.bevelHighlight)
         graphics.fill(x0 + 1, y0 + 1, x0 + 2, y1 - 1, theme.bevelHighlight)
@@ -545,7 +551,7 @@ object HealthPanelHud {
      * 血条：凹槽底 + 描边 + 按血量三档着色的前景 + 顶部高光，并把「当前 / 上限」数值居中叠加其上（无阴影）。
      */
     private fun drawHealthBar(
-        graphics: GuiGraphicsExtractor,
+        graphics: BhiGuiGraphics,
         theme: Theme,
         font: net.minecraft.client.gui.Font,
         x0: Int,
@@ -559,7 +565,7 @@ object HealthPanelHud {
     ) {
         graphics.fill(x0, y0, x1, y1, theme.barTrack)
         // outline 用 (x, y, 宽, 高)：在血条外扩 1px 描边。
-        graphics.outline(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, theme.barBorder)
+        graphics.bhiOutline(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, theme.barBorder)
         // 前景填充按血量三档用荧光亮色当亮底；数字统一纯白，避免与填充色冲突。
         val fillColor = when {
             ratio > 0.5f -> FILL_HEALTHY
@@ -589,7 +595,7 @@ object HealthPanelHud {
         pose.pushMatrix()
         pose.translate(centerX - tw * s / 2f, centerY - font.lineHeight * s / 2f)
         pose.scale(s, s)
-        graphics.text(font, text, 0, 0, HEALTH_NUM_TEXT, true)
+        graphics.bhiText(font, text, 0, 0, HEALTH_NUM_TEXT, true)
         pose.popMatrix()
     }
 
@@ -597,7 +603,7 @@ object HealthPanelHud {
      * 在矩形区域内以「棋盘格」方式打半透明白高光块，营造 Minecraft 像素颗粒质感。
      * 每格 [GLOSS_CELL]×[GLOSS_CELL] 像素，按格行列号奇偶交错着色；边缘格用 min 裁剪不越界。
      */
-    private fun drawGlossCheckerboard(graphics: GuiGraphicsExtractor, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
+    private fun drawGlossCheckerboard(graphics: BhiGuiGraphics, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
         var row = 0
         var py = y0
         while (py < y1) {
@@ -619,7 +625,7 @@ object HealthPanelHud {
      * 在矩形 [x0,y0,x1,y1) 的最内沿绘制 1px 凹陷 bevel：顶/左阴影、底/右高光（光自左上），
      * 叠在血条内容之上，使其呈现「嵌入面板」的凹陷立体感。若想改为凸出，把阴影与高光对调即可。
      */
-    private fun drawInsetBevel(graphics: GuiGraphicsExtractor, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
+    private fun drawInsetBevel(graphics: BhiGuiGraphics, theme: Theme, x0: Int, y0: Int, x1: Int, y1: Int) {
         graphics.fill(x0, y0, x1, y0 + 1, theme.barInsetShadow)       // 顶
         graphics.fill(x0, y0, x0 + 1, y1, theme.barInsetShadow)       // 左
         graphics.fill(x0, y1 - 1, x1, y1, theme.barInsetHighlight)    // 底

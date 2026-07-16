@@ -50,11 +50,21 @@ object EntityModelExtents {
         var maxX = -Float.MAX_VALUE
         var maxY = -Float.MAX_VALUE
         var maxZ = -Float.MAX_VALUE
+        //? if >=1.21.9 {
         root.getExtentsForGui(PoseStack()) { v ->
             minX = min(minX, v.x()); maxX = max(maxX, v.x())
             minY = min(minY, v.y()); maxY = max(maxY, v.y())
             minZ = min(minZ, v.z()); maxZ = max(maxZ, v.z())
         }
+        //?} else {
+        /*val vertices = HashSet<org.joml.Vector3f>()
+        root.getExtentsForGui(PoseStack(), vertices)
+        for (v in vertices) {
+            minX = min(minX, v.x()); maxX = max(maxX, v.x())
+            minY = min(minY, v.y()); maxY = max(maxY, v.y())
+            minZ = min(minZ, v.z()); maxZ = max(maxZ, v.z())
+        }*/
+        //?}
         if (minX > maxX) return null // 模型无任何 cube 时跳过
         val xExtent = maxX - minX
         val yExtent = maxY - minY
