@@ -2,8 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    // Minecraft 26.1+ 的官方发布物不再混淆。
-    id("net.fabricmc.fabric-loom") version "1.16-SNAPSHOT"
+    // Minecraft 1.21.11 及更早版本仍需要 Loom 执行生产环境重映射。
+    id("net.fabricmc.fabric-loom-remap") version "1.16-SNAPSHOT"
     kotlin("jvm") version "2.3.21"
     `maven-publish`
 }
@@ -38,15 +38,16 @@ repositories {
 
 dependencies {
     "minecraft"("com.mojang:minecraft:$minecraftVersion")
+    "mappings"(loom.officialMojangMappings())
 
-    implementation("net.fabricmc:fabric-loader:${prop("loader_version")}")
-    implementation("net.fabricmc.fabric-api:fabric-api:${prop("fabric_api_version")}")
-    implementation("net.fabricmc:fabric-language-kotlin:${prop("fabric_kotlin_version")}")
+    "modImplementation"("net.fabricmc:fabric-loader:${prop("loader_version")}")
+    "modImplementation"("net.fabricmc.fabric-api:fabric-api:${prop("fabric_api_version")}")
+    "modImplementation"("net.fabricmc:fabric-language-kotlin:${prop("fabric_kotlin_version")}")
 
-    implementation("me.shedaniel.cloth:cloth-config-fabric:${prop("cloth_config_version")}") {
+    "modImplementation"("me.shedaniel.cloth:cloth-config-fabric:${prop("cloth_config_version")}") {
         exclude(group = "net.fabricmc.fabric-api")
     }
-    implementation("maven.modrinth:modmenu:${prop("modmenu_version")}")
+    "modImplementation"("maven.modrinth:modmenu:${prop("modmenu_version")}")
 }
 
 tasks.processResources {
