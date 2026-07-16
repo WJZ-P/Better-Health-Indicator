@@ -4,6 +4,7 @@
   "version": "${version}",
   "name": "${mod_name}",
   "description": "${mod_description}",
+  "icon": "assets/better_health_indicator/icon.png",
   "authors": [
     "${mod_author}"
   ],
