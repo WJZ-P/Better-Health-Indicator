@@ -105,8 +105,14 @@ object EntitySelector {
     private fun getLookedAtEntity(minecraft: Minecraft, camera: Camera, maxDistance: Double): LivingEntity? {
         val viewer = minecraft.cameraEntity ?: return null
         val eye = MinecraftCompat.cameraPosition(camera)
+        val vanillaTarget = minecraft.crosshairPickEntity
+        if (vanillaTarget is LivingEntity && vanillaTarget !== viewer && vanillaTarget.isAlive &&
+            vanillaTarget.distanceToSqr(eye) <= maxDistance * maxDistance
+        ) {
+            return vanillaTarget
+        }
         val forward = MinecraftCompat.cameraForward(camera)
-        val reach = Vec3(forward.x().toDouble(), forward.y().toDouble(), forward.z().toDouble()).scale(maxDistance)
+        val reach = forward.scale(maxDistance)
         val end = eye.add(reach)
         val searchBox = viewer.boundingBox.expandTowards(reach).inflate(1.0)
         val hit = ProjectileUtil.getEntityHitResult(
@@ -130,7 +136,7 @@ object EntitySelector {
             // 视锥体与实体包围盒同为世界坐标；略微外扩，避免模型超出碰撞箱的部分在边缘被误剔除。
             return frustum.isVisible(entity.boundingBox.inflate(0.25))
         }
-        return isInViewCone(frame.camera, entity.getPosition(frame.tickProgress))
+        return isInViewCone(frame.camera, MinecraftCompat.entityPosition(entity, frame.tickProgress))
     }
 
     /** 点积圆锥粗筛兜底：比较视线方向与“指向实体方向”的夹角是否落在 FOV 内。 */
@@ -141,8 +147,8 @@ object EntitySelector {
         if (length < 1.0e-4) return true
 
         val forward = MinecraftCompat.cameraForward(camera)
-        val dot = (forward.x() * toEntity.x + forward.y() * toEntity.y + forward.z() * toEntity.z) / length
-        val fovDegrees = Minecraft.getInstance().options.fov().get().toDouble()
+        val dot = (forward.x * toEntity.x + forward.y * toEntity.y + forward.z * toEntity.z) / length
+        val fovDegrees = MinecraftCompat.fov(Minecraft.getInstance())
         val threshold = cos(Math.toRadians(fovDegrees))
         return dot >= threshold
     }
@@ -163,7 +169,13 @@ object EntitySelector {
                 return false
             }
 
-            if (level.getBlockState(hit.blockPos).isSolidRender) {
+            val state = level.getBlockState(hit.blockPos)
+            //? if >=1.21.2 {
+            val solid = state.isSolidRender
+            //?} else {
+            /*val solid = state.isSolidRender(level, hit.blockPos)*/
+            //?}
+            if (solid) {
                 return true
             }
 

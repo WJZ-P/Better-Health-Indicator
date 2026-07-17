@@ -2,10 +2,22 @@ package com.wjz.betterhealthindicator.client.render
 
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
+//? if >=26.1 {
+import com.wjz.betterhealthindicator.platform.BhiPlatformHooks
+//?} else {
+/*
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
+*/
+//?}
 import net.minecraft.client.Minecraft
+//? if <26.1 {
+/*
 import net.minecraft.world.InteractionResult
+*/
+//?}
+import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.player.Player
 
 /**
  * 全局「最近受击目标」追踪：记录本地玩家最近一次攻击的生物与攻击时刻（毫秒墙钟）。
@@ -19,14 +31,24 @@ object AttackTracker {
     private var lastAttackAtMs: Long = 0L
 
     fun register() {
+        //? if >=26.1 {
+        BhiPlatformHooks.registerAttack(::onAttack)
+        //?} else {
+        /*
         AttackEntityCallback.EVENT.register { player, _, _, entity, _ ->
-            if (player === Minecraft.getInstance().player && entity is LivingEntity) {
-                lastAttacked = entity
-                lastAttackAtMs = System.currentTimeMillis()
-            }
+            onAttack(player, entity)
             InteractionResult.PASS
         }
+        */
+        //?}
         BetterHealthIndicatorLogger.info("Attack tracker registered.")
+    }
+
+    private fun onAttack(player: Player, entity: Entity) {
+        if (player === Minecraft.getInstance().player && entity is LivingEntity) {
+            lastAttacked = entity
+            lastAttackAtMs = System.currentTimeMillis()
+        }
     }
 
     /**

@@ -13,3 +13,21 @@ typealias BhiMobEffectSprite = BhiIdentifier
 //?} else {
 /*typealias BhiMobEffectSprite = net.minecraft.client.renderer.texture.TextureAtlasSprite*/
 //?}
+
+/** 创建 Minecraft 默认命名空间下的资源标识符。 */
+fun bhiVanillaIdentifier(path: String): BhiIdentifier {
+    //? if >=1.21 {
+    return BhiIdentifier.withDefaultNamespace(path)
+    //?} else {
+    /*return BhiIdentifier("minecraft", path)*/
+    //?}
+}
+
+/** 创建指定命名空间下的资源标识符。 */
+fun bhiIdentifier(namespace: String, path: String): BhiIdentifier {
+    //? if >=1.21 {
+    return BhiIdentifier.fromNamespaceAndPath(namespace, path)
+    //?} else {
+    /*return BhiIdentifier(namespace, path)*/
+    //?}
+}

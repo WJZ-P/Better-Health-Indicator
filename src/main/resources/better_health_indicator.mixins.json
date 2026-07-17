@@ -5,7 +5,9 @@
   "compatibilityLevel": "JAVA_${java_version}",
   "client": [
     "client.ParticleEngineMixin",
-    "client.EntityRendererMixin"
+    "client.EntityRendererMixin",
+    "client.LevelRendererMixin",
+    "client.GuiMixin"
   ],
   "injectors": {
     "defaultRequire": 1

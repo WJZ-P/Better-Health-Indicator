@@ -10,7 +10,9 @@ import com.wjz.betterhealthindicator.config.PanelFrameShape
 import com.wjz.betterhealthindicator.config.PanelTheme
 import me.shedaniel.clothconfig2.api.ConfigBuilder
 import net.minecraft.client.gui.screens.Screen
-import net.minecraft.network.chat.Component
+import com.wjz.betterhealthindicator.client.compat.BhiConfigText
+import com.wjz.betterhealthindicator.client.compat.bhiConfigLiteral
+import com.wjz.betterhealthindicator.client.compat.bhiConfigTranslatable
 
 /**
  * 用 Cloth Config 构建分类设置页（全局 / 头顶血条 / 屏幕面板），保存时写回 [ConfigManager]。
@@ -19,14 +21,14 @@ import net.minecraft.network.chat.Component
  * 故英文客户端显示英文、中文客户端显示中文。新增选项时记得同步补齐两份语言文件。
  */
 object ClothConfigScreenFactory {
-    private fun tr(key: String): Component = Component.translatable(key)
-    private fun tr(key: String, vararg args: Any): Component = Component.translatable(key, *args)
+    private fun tr(key: String): BhiConfigText = bhiConfigTranslatable(key)
+    private fun tr(key: String, vararg args: Any): BhiConfigText = bhiConfigTranslatable(key, *args)
 
     fun create(parent: Screen): Screen {
         val config = ConfigManager.config
         val builder = ConfigBuilder.create()
             .setParentScreen(parent)
-            .setTitle(Component.literal("Better Health Indicator"))
+            .setTitle(bhiConfigLiteral("Better Health Indicator"))
             .setSavingRunnable {
                 ConfigManager.save()
                 // 配色可能变了：丢弃旧染色贴图，下次渲染按新色重新烘焙。
