@@ -4,6 +4,10 @@ pluginManagement {
             name = "Fabric"
             url = uri("https://maven.fabricmc.net/")
         }
+        maven {
+            name = "LegacyFabric"
+            url = uri("https://repo.legacyfabric.net/repository/legacyfabric/")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -17,6 +21,9 @@ plugins {
 stonecutter {
     kotlinController = true
     create(rootProject) {
+        // 1.13.2 及更早版本使用 Legacy Fabric 的 Intermediary 与 Yarn。
+        versions("1.12.2", "1.13.2").buildscript("build-legacy.gradle.kts")
+
         // 1.21.11 及更早版本仍需要从官方名称重映射到生产环境名称。
         versions(
             "1.14.4",

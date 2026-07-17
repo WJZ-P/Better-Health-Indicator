@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "better_health_indicator",
+  "version": "${version}",
+  "name": "Better Health Indicator",
+  "description": "A lightweight health indicator backend for Legacy Fabric.",
+  "authors": ["WJZ_P"],
+  "license": "AGPL-3.0",
+  "icon": "assets/better_health_indicator/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.wjz.betterhealthindicator.legacyfabric.LegacyBetterHealthIndicatorClient"
+    ]
+  },
+  "mixins": [
+    "better_health_indicator_legacy.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.wjz.betterhealthindicator.legacyfabric.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "LivingEntityRendererMixin",
+    "InGameHudMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
