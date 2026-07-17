@@ -12,6 +12,7 @@ fun prop(key: String): String = project.property(key) as String
 
 val minecraftVersion = stonecutter.current.version
 val requiredJava = prop("java_version").toInt()
+val fabricApiModId = project.findProperty("fabric_api_mod_id")?.toString() ?: "fabric-api"
 
 version = "${prop("mod_version")}+mc$minecraftVersion"
 group = prop("mod_group")
@@ -57,6 +58,7 @@ tasks.processResources {
         "java_version" to requiredJava,
         "loader_version" to prop("loader_version"),
         "fabric_api_version" to prop("fabric_api_version"),
+        "fabric_api_mod_id" to fabricApiModId,
         "fabric_kotlin_version" to prop("fabric_kotlin_version"),
         "mod_id" to prop("mod_id"),
         "mod_name" to prop("mod_name"),
