@@ -1,6 +1,7 @@
 package com.wjz.betterhealthindicator.client.render
 
 import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.bhiIdentifier
 import com.mojang.blaze3d.platform.NativeImage
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import net.minecraft.client.Minecraft
@@ -18,8 +19,8 @@ import java.util.function.Supplier
  * 这里走「精确调色板替换」，三档颜色各自独立（高光可比主体更亮），像素锐利、每帧零额外开销。
  */
 object TintedHeartTextures {
-    private val FULL_TEMPLATE = Identifier.fromNamespaceAndPath("better_health_indicator", "textures/heart/template_full.png")
-    private val HALF_TEMPLATE = Identifier.fromNamespaceAndPath("better_health_indicator", "textures/heart/template_half.png")
+    private val FULL_TEMPLATE = bhiIdentifier("better_health_indicator", "textures/heart/template_full.png")
+    private val HALF_TEMPLATE = bhiIdentifier("better_health_indicator", "textures/heart/template_half.png")
 
     // 模板里的三档精确灰度（不含 alpha）。
     private const val MAIN_GRAY = 0xFFFFFF // 主体
@@ -37,10 +38,11 @@ object TintedHeartTextures {
     // 主色(0xRRGGBB) -> (满心贴图 id, 半心贴图 id)。
     private val cache = HashMap<Int, Pair<Identifier, Identifier>>()
 
-    /** 客户端初始化时预载模板（失败仅记录日志，渲染端会回退到原版红心）。 */
+    /** 客户端入口仅登记懒加载；首次实际绘制时资源管理器已就绪，再读取并烘焙模板。 */
     fun init() {
-        ensureTemplates()
-        BetterHealthIndicatorLogger.info("Tinted heart templates loaded: ${templateFull != null && templateHalf != null}")
+        // Some clients invoke the mod entrypoint before Minecraft's resource manager exists.
+        // The first actual HUD/world render happens after resources are ready and loads lazily.
+        BetterHealthIndicatorLogger.info("Tinted heart textures initialized for lazy loading.")
     }
 
     /** 配置（颜色）变更后调用：释放已注册的染色贴图、清空缓存并丢弃模板，下次按新色重新烘焙。 */
@@ -91,7 +93,11 @@ object TintedHeartTextures {
     }
 
     private fun readImage(id: Identifier): NativeImage? = try {
+        //? if >=1.19 {
         Minecraft.getInstance().resourceManager.getResource(id).orElse(null)?.open()?.use { NativeImage.read(it) }
+        //?} else {
+        /*Minecraft.getInstance().resourceManager.getResource(id).inputStream.use { NativeImage.read(it) }*/
+        //?}
     } catch (e: Exception) {
         BetterHealthIndicatorLogger.error("Failed to load heart template $id", e)
         null
@@ -108,10 +114,18 @@ object TintedHeartTextures {
         val image = NativeImage(NativeImage.Format.RGBA, w, h, false)
         for (y in 0 until h) {
             for (x in 0 until w) {
+                //? if >=1.21.2 {
                 val p = template.getPixel(x, y) // ARGB
+                //?} else {
+                /*val p = template.getPixelRGBA(x, y) // ABGR（模板为灰度，读值无需换序）*/
+                //?}
                 val a = (p ushr 24) and 0xFF
                 if (a == 0) {
+                    //? if >=1.21.2 {
                     image.setPixel(x, y, 0)
+                    //?} else {
+                    /*image.setPixelRGBA(x, y, 0)*/
+                    //?}
                     continue
                 }
                 val rgb = p and 0xFFFFFF
@@ -121,10 +135,16 @@ object TintedHeartTextures {
                     HILITE_GRAY -> hilite
                     else -> rgb
                 }
+                //? if >=1.21.2 {
                 image.setPixel(x, y, (a shl 24) or newRgb)
+                //?} else {
+                /*val abgr = (a shl 24) or ((newRgb and 0xFF) shl 16) or
+                    (newRgb and 0x00FF00) or ((newRgb ushr 16) and 0xFF)
+                image.setPixelRGBA(x, y, abgr)*/
+                //?}
             }
         }
-        val id = Identifier.fromNamespaceAndPath("better_health_indicator", "tinted_heart/$name")
+        val id = bhiIdentifier("better_health_indicator", "tinted_heart/$name")
         //? if >=1.21.5 {
         Minecraft.getInstance().textureManager.register(id, DynamicTexture(Supplier { "bhi/$name" }, image))
         //?} else {

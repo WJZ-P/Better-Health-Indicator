@@ -4,24 +4,42 @@ import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.wjz.betterhealthindicator.client.compat.BhiWorldRenderContext
 import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
 import com.wjz.betterhealthindicator.client.compat.BhiWorldCollector
+import com.wjz.betterhealthindicator.client.compat.BhiFontDisplayMode
+import com.wjz.betterhealthindicator.client.compat.BhiMutableComponent
 import com.wjz.betterhealthindicator.client.compat.bhiEntityCutout
+import com.wjz.betterhealthindicator.client.compat.bhiColor
+import com.wjz.betterhealthindicator.client.compat.bhiAppend
+import com.wjz.betterhealthindicator.client.compat.bhiBold
+import com.wjz.betterhealthindicator.client.compat.bhiEmpty
+import com.wjz.betterhealthindicator.client.compat.bhiLiteral
+import com.wjz.betterhealthindicator.client.compat.BhiQuaternionf
+import com.wjz.betterhealthindicator.client.compat.bhiVector3f
+import com.wjz.betterhealthindicator.client.compat.bhiTransform
+import com.wjz.betterhealthindicator.client.compat.bhiX
+import com.wjz.betterhealthindicator.client.compat.bhiY
+import com.wjz.betterhealthindicator.client.compat.bhiZ
 import com.wjz.betterhealthindicator.client.compat.bhiSubmitGeometry
 import com.wjz.betterhealthindicator.client.compat.bhiSubmitText
+import com.wjz.betterhealthindicator.client.compat.bhiVisualText
+import com.wjz.betterhealthindicator.client.compat.bhiWidth
 import com.mojang.blaze3d.vertex.PoseStack
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
+//? if >=26.1 {
+import com.wjz.betterhealthindicator.platform.BhiPlatformHooks
+//?} else {
+/*
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+*/
+//?}
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.Font
 import net.minecraft.client.renderer.culling.Frustum
 import net.minecraft.network.chat.Component
-import net.minecraft.network.chat.MutableComponent
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.phys.Vec3
-import org.joml.Vector3f
-import org.joml.Quaternionf
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -152,36 +170,66 @@ object EntityHealthBarRenderer {
 
     private val pendingDeaths = ArrayList<PendingDeath>()
     private val deathSequences = ArrayList<DeathSequence>()
-    private var legacyCullFrustum: Frustum? = null
 
     /** 爱心层中的一片待绘四边形：槽位中心 X + 是否水平翻转（决定半心填充侧）+ 竖直偏移（抖动用）。 */
     private class HeartQuad(val cx: Float, val flipU: Boolean, val cy: Float = 0.0f, val rot: Float = 0.0f)
 
+    /**
+     * 1.21 的 Camera 四元数相对旧版绕 Y 翻转了 180°；布局以 1.21+ 的 billboard 轴约定为准。
+     * 旧版世界渲染需同步镜像 X、绕 Z 的旋转和前后深度，HUD 坐标不经过这里。
+     */
+    private fun headBillboardAxis(value: Float): Float {
+        //? if >=1.21 {
+        return value
+        //?} else {
+        /*return -value*/
+        //?}
+    }
+
+    /** 旧相机轴会让屏幕上的贴图左右相反，半心 U 方向需与几何坐标同步镜像。 */
+    private fun headBillboardFlipU(flipU: Boolean): Boolean {
+        //? if >=1.21 {
+        return flipU
+        //?} else {
+        /*return !flipU*/
+        //?}
+    }
+
     fun register() {
         //? if >=26.1 {
-        net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.COLLECT_SUBMITS.register(
-            net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.CollectSubmits { context -> collect(context) },
-        )
+        BhiPlatformHooks.registerLevelRender(::collect)
         //?} else if >=1.21.9 {
-        /*net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.END_EXTRACTION.register(
-            net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.EndExtraction { context ->
-                legacyCullFrustum = context.frustum()
-            },
-        )
-        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES.register(
-            net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AfterEntities { context -> collect(context) },
+        /*net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BEFORE_ENTITIES.register(
+            net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BeforeEntities { context -> collect(context) },
         )*/
-        //?} else {
+        //?} else if >=1.16 {
         /*net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_ENTITIES.register(
             net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AfterEntities { context -> collect(context) },
         )*/
+        //?} else {
+        /*// 1.15 尚无 WorldRenderEvents；由 LevelRendererMixin 在世界帧末尾调用 renderLegacy。*/
         //?}
         // 掉血检测属于游戏状态采样，放在固定 20Hz 的客户端 tick，避免随帧率空转，并与渲染职责分离。
+        //? if >=26.1 {
+        BhiPlatformHooks.registerEndClientTick(::tickDamageDetection)
+        //?} else {
+        /*
         ClientTickEvents.END_CLIENT_TICK.register(
             ClientTickEvents.EndTick { minecraft -> tickDamageDetection(minecraft) },
         )
+        */
+        //?}
         BetterHealthIndicatorLogger.info("Entity health bar renderer registered.")
     }
+
+    //? if <1.16 {
+    /*// Fabric 1.15 没有世界渲染事件，由旧版专用 Mixin 转接到同一套收集/绘制逻辑。
+    fun renderLegacy(poseStack: PoseStack, tickProgress: Float, camera: net.minecraft.client.Camera) {
+        val buffers = Minecraft.getInstance().renderBuffers().bufferSource()
+        collect(BhiWorldRenderContext(poseStack, buffers, camera))
+        buffers.endBatch()
+    }*/
+    //?}
 
     /** 每客户端 tick 采样所有已加载生物的血量，检测掉血并生成爱心粒子。门控与头顶血条一致。 */
     private fun tickDamageDetection(minecraft: Minecraft) {
@@ -200,7 +248,7 @@ object EntityHealthBarRenderer {
         lastHealth.keys.retainAll(seenEntities)
 
         // 与原版粒子一致，物理按客户端 tick 定步推进；世界冻结（/tick freeze）时不推进。
-        if (level.tickRateManager().runsNormally()) {
+        if (MinecraftCompat.shouldRunTicks(level)) {
             HeartParticleManager.tick()
             tickDeathSequences(minecraft)
         }
@@ -218,11 +266,11 @@ object EntityHealthBarRenderer {
                 if (heart.exploded || seq.age < heart.explodeTick) continue
                 heart.exploded = true
                 // 该颗心的世界中心：与血条同基准（局部 +cx 经 scale(-x) 与相机朝向映射到世界）。
-                val offset = Vector3f(-seq.scale * heart.cx, 0.0f, 0.0f)
-                rotation.transform(offset)
-                val hx = seq.worldX + offset.x
-                val hy = seq.worldY + offset.y
-                val hz = seq.worldZ + offset.z
+                val offset = bhiVector3f(-seq.scale * heart.cx, 0.0f, 0.0f)
+                rotation.bhiTransform(offset)
+                val hx = seq.worldX + offset.bhiX()
+                val hy = seq.worldY + offset.bhiY()
+                val hz = seq.worldZ + offset.bhiZ()
                 HeartParticleManager.spawnContainerShards(hx, hy, hz, rotation, heart.containerTexture)
             }
             if (seq.done()) iterator.remove()
@@ -236,8 +284,10 @@ object EntityHealthBarRenderer {
         val config = ConfigManager.config
         if (!config.enabled || !config.headBarEnabled) return
 
+        HeartGraphics.prepareWorldTextures()
+
         val minecraft = Minecraft.getInstance()
-        val tickProgress = minecraft.deltaTracker.getGameTimeDeltaPartialTick(false)
+        val tickProgress = MinecraftCompat.tickProgress(minecraft)
 
         // 在渲染帧解析本 tick 的待生成粒子，确保与血条爱心同基准、同帧、像素级重合（须先于可能的提前返回执行，避免堆积）。
         flushPendingSpawns(minecraft, config, tickProgress)
@@ -253,7 +303,9 @@ object EntityHealthBarRenderer {
         val collector = context.commandQueue()
         val cameraState = context.worldState().cameraRenderState
         val cameraOrientation = cameraState.orientation
-        val cullFrustum = legacyCullFrustum*/
+        // The extraction frustum is not part of this drawing context and can be stale by the
+        // time custom nodes are submitted. The shared selector's camera-cone fallback is stable.
+        val cullFrustum: Frustum? = null*/
         //?} else {
         /*val poseStack = context.matrixStack() ?: return
         val collector = context.consumers() ?: return
@@ -358,7 +410,8 @@ object EntityHealthBarRenderer {
                 if (rightSide) 1 else -1
             }
             // 仅登记“待生成”，世界坐标推迟到渲染帧按血条爱心的同一基准解析，确保像素级重合、无缝衔接。
-            pendingSpawns.add(PendingSpawn(entity, ref.cx, texture, flipU, style, horizontalDir))
+            val worldFlipU = if (isHalf) headBillboardFlipU(flipU) else false
+            pendingSpawns.add(PendingSpawn(entity, headBillboardAxis(ref.cx), texture, worldFlipU, style, horizontalDir))
             spawned++
         }
     }
@@ -376,7 +429,7 @@ object EntityHealthBarRenderer {
         // 死亡序列：在死亡处（与血条同基准的世界中心）固定下来，后续逐 tick 自行抖动 + 逐颗炸裂。
         for (death in pendingDeaths) {
             if (deathSequences.size >= DEATH_MAX) break
-            val position = death.entity.getPosition(tickProgress)
+            val position = MinecraftCompat.entityPosition(death.entity, tickProgress)
             val height = barLocalY(death.entity, config)
             deathSequences.add(
                 DeathSequence(death.entity.id, position.x, position.y + height, position.z, config.scale, death.hearts),
@@ -384,9 +437,9 @@ object EntityHealthBarRenderer {
         }
         pendingDeaths.clear()
         if (pendingSpawns.isEmpty()) return
-        // 屏幕右方在世界中的水平单位向量（billboard 的 scale(-x) 下，局部 +X→屏幕左，故屏幕右= rotation·(+1,0,0)）。
-        val screenRight = Vector3f(1.0f, 0.0f, 0.0f)
-        rotation.transform(screenRight)
+        // 屏幕右方在世界中的水平单位向量；旧版相机 X 轴与 1.21+ 相反，由同一兼容符号换算。
+        val screenRight = bhiVector3f(headBillboardAxis(1.0f), 0.0f, 0.0f)
+        rotation.bhiTransform(screenRight)
         var srx = screenRight.x().toDouble()
         var srz = screenRight.z().toDouble()
         val srLen = sqrt(srx * srx + srz * srz)
@@ -396,17 +449,17 @@ object EntityHealthBarRenderer {
         }
         for (pending in pendingSpawns) {
             val entity = pending.entity
-            val position = entity.getPosition(tickProgress)
+            val position = MinecraftCompat.entityPosition(entity, tickProgress)
             val height = barLocalY(entity, config)
-            val offset = Vector3f(-config.scale * pending.cx, 0.0f, 0.0f)
-            rotation.transform(offset)
+            val offset = bhiVector3f(-config.scale * pending.cx, 0.0f, 0.0f)
+            rotation.bhiTransform(offset)
             // 半心：朝被打掉那侧（屏幕左/右）逸散；满心：无方向偏置、四散。
             val biasX = srx * pending.horizontalDir
             val biasZ = srz * pending.horizontalDir
             HeartParticleManager.spawn(
-                position.x + offset.x,
-                position.y + height + offset.y,
-                position.z + offset.z,
+                position.x + offset.bhiX(),
+                position.y + height + offset.bhiY(),
+                position.z + offset.bhiZ(),
                 pending.texture,
                 pending.flipU,
                 pending.style,
@@ -450,11 +503,11 @@ object EntityHealthBarRenderer {
         frame: EntitySelector.Frame,
         collector: BhiWorldCollector,
         poseStack: PoseStack,
-        cameraOrientation: Quaternionf,
+        cameraOrientation: BhiQuaternionf,
     ) {
         val config = frame.config
         val cameraPosition = frame.cameraPosition
-        val position = entity.getPosition(frame.tickProgress)
+        val position = MinecraftCompat.entityPosition(entity, frame.tickProgress)
         val base = Vec3(
             position.x - cameraPosition.x,
             position.y - cameraPosition.y,
@@ -484,7 +537,7 @@ object EntityHealthBarRenderer {
         val detailSegment: TextSegment? = when {
             showHp -> TextSegment(healthComponent(entity, healthRatio, config), NAME_TAG_SCALE * config.healthTextScale.toFloat())
             showMult -> TextSegment(
-                styled(Component.literal("x $heartMultiplier").withColor(HeartLayout.multiplierColor(heartMultiplier)), config),
+                styled(bhiLiteral("x $heartMultiplier").bhiColor(HeartLayout.multiplierColor(heartMultiplier)), config),
                 nameScale * MULTIPLIER_SCALE,
             )
             else -> null
@@ -500,7 +553,7 @@ object EntityHealthBarRenderer {
         // 未启用「血条右侧」时，详情用彩色「|」接在名字行尾部（原行为）。
         if (!detailBesideBar && detailSegment != null) {
             if (config.showName) {
-                segments.add(TextSegment(styled(Component.literal(" | ").withColor(SEPARATOR_COLOR), config), nameScale))
+                segments.add(TextSegment(styled(bhiLiteral(" | ").bhiColor(SEPARATOR_COLOR), config), nameScale))
             }
             segments.add(detailSegment)
         }
@@ -526,16 +579,16 @@ object EntityHealthBarRenderer {
     private fun healthComponent(entity: LivingEntity, ratio: Float, config: HealthIndicatorConfig): Component {
         val current = ceil(entity.health).toInt()
         val max = ceil(entity.maxHealth).toInt()
-        val comp = Component.empty()
-            .append(Component.literal("$current").withColor(healthRatioColor(ratio)))
-            .append(Component.literal(" / ").withColor(SEPARATOR_COLOR))
-            .append(Component.literal("$max").withColor(maxHealthColor(entity.maxHealth)))
+        val comp = bhiEmpty()
+            .bhiAppend(bhiLiteral("$current").bhiColor(healthRatioColor(ratio)))
+            .bhiAppend(bhiLiteral(" / ").bhiColor(SEPARATOR_COLOR))
+            .bhiAppend(bhiLiteral("$max").bhiColor(maxHealthColor(entity.maxHealth)))
         return styled(comp, config)
     }
 
     /** 按需为文本套用加粗样式。 */
-    private fun styled(component: MutableComponent, config: HealthIndicatorConfig): MutableComponent =
-        if (config.textBold) component.withStyle(ChatFormatting.BOLD) else component
+    private fun styled(component: BhiMutableComponent, config: HealthIndicatorConfig): BhiMutableComponent =
+        component.bhiBold(config.textBold)
 
     /** 当前血量颜色：按当前/最大比例分档，高=绿、中=黄、残血=红。 */
     private fun healthRatioColor(ratio: Float): Int = when {
@@ -566,32 +619,36 @@ object EntityHealthBarRenderer {
         localY: Double,
         segments: List<TextSegment>,
         config: HealthIndicatorConfig,
-        cameraOrientation: Quaternionf,
+        cameraOrientation: BhiQuaternionf,
         anchorLeftR: Float? = null,
     ) {
         val font = Minecraft.getInstance().font
         // occludeBehindWalls：true 走 NORMAL（被墙体遮挡），false 走 SEE_THROUGH（始终可见）。
-        val displayMode = if (config.occludeBehindWalls) Font.DisplayMode.NORMAL else Font.DisplayMode.SEE_THROUGH
-        val totalWorld = segments.sumOf { (font.width(it.text) * it.scale).toDouble() }.toFloat()
+        val displayMode = if (config.occludeBehindWalls) BhiFontDisplayMode.NORMAL else BhiFontDisplayMode.SEE_THROUGH
+        val totalWorld = segments.sumOf { (font.bhiWidth(it.text) * it.scale).toDouble() }.toFloat()
         // anchorLeftR 非空：以该世界 X（屏幕右为正）为左边缘左对齐；否则整体水平居中。
         var penWorld = anchorLeftR ?: (-totalWorld / 2.0f)
         for (seg in segments) {
-            val segWorldWidth = font.width(seg.text) * seg.scale
+            val segWorldWidth = font.bhiWidth(seg.text) * seg.scale
             val halfHeight = font.lineHeight * seg.scale / 2.0f
             poseStack.pushPose()
             try {
                 poseStack.translate(base.x, base.y + localY, base.z)
                 poseStack.mulPose(cameraOrientation)
-                // 在 billboard 空间内沿世界单位推进笔位（左边缘），并上移半个行高做垂直居中。
+                // 1.21+ 原版名牌使用正 X；1.20.4 及更早使用负 X，并把屏幕笔位取反。
+                //? if >=1.21 {
                 poseStack.translate(penWorld.toDouble(), halfHeight.toDouble(), 0.0)
-                // 仅翻转 Y；X 必须保持正，否则四边形绕序反转被字体渲染剔除。
                 poseStack.scale(seg.scale, -seg.scale, seg.scale)
+                //?} else {
+                /*poseStack.translate((-penWorld).toDouble(), halfHeight.toDouble(), 0.0)
+                poseStack.scale(-seg.scale, -seg.scale, seg.scale)*/
+                //?}
                 collector.bhiSubmitText(
                     font,
                     poseStack,
                     0.0f,
                     0.0f,
-                    seg.text.visualOrderText,
+                    bhiVisualText(seg.text),
                     true,
                     displayMode,
                     MinecraftCompat.fullBright(),
@@ -632,24 +689,27 @@ object EntityHealthBarRenderer {
             map.getOrPut(texture) { ArrayList() }.add(HeartQuad(cx, flipU, cy, rot))
 
         // 当前层半心的填充侧：drainFromRight 时填充屏幕左半（与血条扣血方向一致）。
-        val fillFlip = config.drainFromRight
+        val fillFlip = headBillboardFlipU(config.drainFromRight)
         view.slots.forEachIndexed { index, slot ->
             // 受击散开：整颗心（container 背板 + 彩色层）按随机方向飞出/飞回，并整体绕中心偏转一定角度。
             val scatter = HeartScatterTracker.offset(entityId, index)
             // 残血濒死：每颗心独立、相邻反相的垂直抖动（抖几下歇一会儿）。
             val lowHealthShake = LowHealthShake.verticalOffset(entityId, index, health, maxHealth, config)
-            val cx = slot.cx + scatter[0]
+            val cx = headBillboardAxis(slot.cx + scatter[0])
             val cy = scatter[1] + lowHealthShake
-            val rot = scatter[2]
+            val rot = headBillboardAxis(scatter[2])
             add(containerLayer, containerTexture, cx, cy, rot, false)
-            for (q in topHeartQuads(slot, fillFlip, view.topHardcore, view.baseHardcore)) add(heartLayer, q.texture, cx, cy, rot, q.flipU)
+            for (q in topHeartQuads(slot, fillFlip, view.topHardcore, view.baseHardcore)) {
+                add(heartLayer, q.texture, cx, cy, rot, q.flipU)
+            }
         }
 
         // 把“世界深度偏移”换算为 billboard 局部 z：billboard 会以 config.scale 缩放局部坐标，故局部 z = 世界偏移 / scale。
         // 世界偏移 = HEART_DEPTH_BIAS × 距离，从而屏幕剪切恒定（亚像素）、深度差随距离自适应。
         val distance = base.length().toFloat()
         val scale = config.scale.coerceAtLeast(1.0e-4f)
-        val zStep = (HEART_DEPTH_BIAS.toFloat() * distance) / scale
+        // 旧版与 1.21+ 的相机 Z 轴约定相反；兼容后该值在两边都指向 container 前方。
+        val zStep = headBillboardAxis((HEART_DEPTH_BIAS.toFloat() * distance) / scale)
 
         billboard(poseStack, base, height, config.scale) {
             drawHeartLayer(collector, poseStack, containerLayer, halfSize, 0.0f)
@@ -711,7 +771,14 @@ object EntityHealthBarRenderer {
             // slots 按 logical 升序；最高 logical（末尾）最先清空，故 rank=0（最先炸）对应末尾。
             val rank = n - 1 - i
             val explodeTick = DEATH_SHAKE_TICKS + if (n <= 1) 0 else rank * DEATH_EXPLODE_TICKS / n
-            hearts.add(DeathHeart(slot.cx, HeartGraphics.CONTAINER, explodeTick, (Math.random() * Math.PI * 2.0).toFloat()))
+            hearts.add(
+                DeathHeart(
+                    headBillboardAxis(slot.cx),
+                    HeartGraphics.CONTAINER,
+                    explodeTick,
+                    (Math.random() * Math.PI * 2.0).toFloat(),
+                ),
+            )
         }
         pendingDeaths.add(PendingDeath(entity, hearts))
     }

@@ -1,6 +1,7 @@
 package com.wjz.betterhealthindicator.client.render
 
 import com.mojang.blaze3d.vertex.PoseStack
+import com.wjz.betterhealthindicator.client.compat.bhiTransformPosition
 import net.minecraft.client.Minecraft
 import net.minecraft.client.renderer.entity.LivingEntityRenderer
 import net.minecraft.world.entity.EntityType
@@ -40,10 +41,18 @@ object EntityModelExtents {
      * （走路时腿张开等），导致尺寸忽大忽小。非生物渲染器或空模型返回 null，调用方退化为碰撞箱兜底。
      */
     private fun compute(entity: LivingEntity): Extents? {
+        //? if >=1.17 {
         val renderer = Minecraft.getInstance().entityRenderDispatcher.getRenderer(entity)
+        //? if >=1.21.2 {
         val model = (renderer as? LivingEntityRenderer<*, *, *>)?.model ?: return null
+        //?} else {
+        /*val model = (renderer as? LivingEntityRenderer<*, *>)?.model as? net.minecraft.client.model.HierarchicalModel<*>
+            ?: return null*/
+        //?}
         val root = model.root()
+        //? if >=1.19 {
         root.getAllParts().forEach { it.resetPose() }
+        //?}
         var minX = Float.MAX_VALUE
         var minY = Float.MAX_VALUE
         var minZ = Float.MAX_VALUE
@@ -70,7 +79,7 @@ object EntityModelExtents {
             for (x in floatArrayOf(cube.minX, cube.maxX)) {
                 for (y in floatArrayOf(cube.minY, cube.maxY)) {
                     for (z in floatArrayOf(cube.minZ, cube.maxZ)) {
-                        val v = matrix.transformPosition(org.joml.Vector3f(x / 16.0f, y / 16.0f, z / 16.0f))
+                        val v = bhiTransformPosition(matrix, x / 16.0f, y / 16.0f, z / 16.0f)
                         minX = min(minX, v.x()); maxX = max(maxX, v.x())
                         minY = min(minY, v.y()); maxY = max(maxY, v.y())
                         minZ = min(minZ, v.z()); maxZ = max(maxZ, v.z())
@@ -84,5 +93,8 @@ object EntityModelExtents {
         val yExtent = maxY - minY
         val zExtent = maxZ - minZ
         return Extents(height = yExtent, horizontalDiagonal = sqrt(xExtent * xExtent + zExtent * zExtent))
+        //?} else {
+        /*return null*/
+        //?}
     }
 }

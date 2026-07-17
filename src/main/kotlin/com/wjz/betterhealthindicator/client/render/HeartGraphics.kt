@@ -3,14 +3,20 @@ package com.wjz.betterhealthindicator.client.render
 import com.mojang.blaze3d.vertex.VertexConsumer
 import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.bhiVanillaIdentifier
+import com.wjz.betterhealthindicator.client.compat.BhiMatrix4f
 import net.minecraft.client.renderer.texture.OverlayTexture
-import org.joml.Matrix4f
 import kotlin.math.cos
 import kotlin.math.sin
 
 /** 心形精灵路径构造。提为顶层函数，避免枚举条目反向依赖 [HeartGraphics] 对象造成循环初始化。 */
-private fun heartSprite(name: String): Identifier =
-    Identifier.withDefaultNamespace("textures/gui/sprites/hud/heart/$name.png")
+private fun heartSprite(name: String): Identifier {
+    //? if >=1.20.2 {
+    return bhiVanillaIdentifier("textures/gui/sprites/hud/heart/$name.png")
+    //?} else {
+    /*return LegacyHeartTextures.identifier(name)*/
+    //?}
+}
 
 /**
  * 爱心贴图与四边形绘制工具，供头顶血条与掉血粒子共用。
@@ -31,12 +37,19 @@ object HeartGraphics {
 
     const val SIZE: Float = 9.0f
 
+    /** 旧版需要把 icons.png 中的爱心裁成世界渲染可直接采样的独立纹理；新版无需处理。 */
+    fun prepareWorldTextures() {
+        //? if <1.20.2 {
+        /*LegacyHeartTextures.ensureLoaded()*/
+        //?}
+    }
+
     // —— GUI（2D HUD）用心形精灵 id：走 GUI 图集（无 textures/gui/sprites 前缀、无 .png），供屏幕面板心形血条复用。 ——
     // container_blinking 即原版受击/回血时的白色外圈高亮。
-    val GUI_CONTAINER: Identifier = Identifier.withDefaultNamespace("hud/heart/container")
-    val GUI_CONTAINER_BLINKING: Identifier = Identifier.withDefaultNamespace("hud/heart/container_blinking")
-    val GUI_CONTAINER_HARDCORE: Identifier = Identifier.withDefaultNamespace("hud/heart/container_hardcore")
-    val GUI_CONTAINER_HARDCORE_BLINKING: Identifier = Identifier.withDefaultNamespace("hud/heart/container_hardcore_blinking")
+    val GUI_CONTAINER: Identifier = bhiVanillaIdentifier("hud/heart/container")
+    val GUI_CONTAINER_BLINKING: Identifier = bhiVanillaIdentifier("hud/heart/container_blinking")
+    val GUI_CONTAINER_HARDCORE: Identifier = bhiVanillaIdentifier("hud/heart/container_hardcore")
+    val GUI_CONTAINER_HARDCORE_BLINKING: Identifier = bhiVanillaIdentifier("hud/heart/container_hardcore_blinking")
 
     /** 按是否极限模式选择心容器 GUI sprite（含受击闪白态）。 */
     fun guiContainer(hardcore: Boolean, blinking: Boolean): Identifier = when {
@@ -104,10 +117,10 @@ object HeartGraphics {
         private val half = heartSprite("half")
         private val hardcoreFull = heartSprite("hardcore_full")
         private val hardcoreHalf = heartSprite("hardcore_half")
-        private val guiFull = Identifier.withDefaultNamespace("hud/heart/full")
-        private val guiHalf = Identifier.withDefaultNamespace("hud/heart/half")
-        private val guiHardcoreFull = Identifier.withDefaultNamespace("hud/heart/hardcore_full")
-        private val guiHardcoreHalf = Identifier.withDefaultNamespace("hud/heart/hardcore_half")
+        private val guiFull = bhiVanillaIdentifier("hud/heart/full")
+        private val guiHalf = bhiVanillaIdentifier("hud/heart/half")
+        private val guiHardcoreFull = bhiVanillaIdentifier("hud/heart/hardcore_full")
+        private val guiHardcoreHalf = bhiVanillaIdentifier("hud/heart/hardcore_half")
 
         override fun fullFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreFull else full
         override fun halfFor(hardcore: Boolean): Identifier = if (hardcore) hardcoreHalf else half
@@ -132,7 +145,7 @@ object HeartGraphics {
      */
     fun quad(
         consumer: VertexConsumer,
-        matrix: Matrix4f,
+        matrix: BhiMatrix4f,
         left: Float,
         top: Float,
         right: Float,
@@ -156,7 +169,7 @@ object HeartGraphics {
      */
     fun quadRotated(
         consumer: VertexConsumer,
-        matrix: Matrix4f,
+        matrix: BhiMatrix4f,
         cx: Float,
         cy: Float,
         half: Float,
@@ -186,7 +199,7 @@ object HeartGraphics {
      */
     fun quadUv(
         consumer: VertexConsumer,
-        matrix: Matrix4f,
+        matrix: BhiMatrix4f,
         left: Float,
         top: Float,
         right: Float,
@@ -204,12 +217,35 @@ object HeartGraphics {
         vertex(consumer, matrix, left, top, u0, v0, color, z)
     }
 
-    private fun vertex(consumer: VertexConsumer, matrix: Matrix4f, x: Float, y: Float, u: Float, v: Float, color: Int, z: Float) {
+    private fun vertex(consumer: VertexConsumer, matrix: BhiMatrix4f, x: Float, y: Float, u: Float, v: Float, color: Int, z: Float) {
+        //? if >=1.21 {
         consumer.addVertex(matrix, x, y, z)
             .setColor(color)
             .setUv(u, v)
             .setOverlay(OverlayTexture.NO_OVERLAY)
             .setLight(MinecraftCompat.fullBright())
             .setNormal(0.0f, 0.0f, 1.0f)
+        //?} else if >=1.18 {
+        /*consumer.vertex(matrix, x, y, z)
+            .color(color)
+            .uv(u, v)
+            .overlayCoords(OverlayTexture.NO_OVERLAY)
+            .uv2(MinecraftCompat.fullBright())
+            .normal(0.0f, 0.0f, 1.0f)
+            .endVertex()*/
+        //?} else {
+        /*consumer.vertex(matrix, x, y, z)
+            .color(
+                (color ushr 16) and 0xFF,
+                (color ushr 8) and 0xFF,
+                color and 0xFF,
+                (color ushr 24) and 0xFF,
+            )
+            .uv(u, v)
+            .overlayCoords(OverlayTexture.NO_OVERLAY)
+            .uv2(MinecraftCompat.fullBright())
+            .normal(0.0f, 0.0f, 1.0f)
+            .endVertex()*/
+        //?}
     }
 }

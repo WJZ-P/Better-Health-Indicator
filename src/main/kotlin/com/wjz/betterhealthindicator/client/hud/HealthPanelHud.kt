@@ -1,8 +1,20 @@
 package com.wjz.betterhealthindicator.client.hud
 
 import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
+import com.wjz.betterhealthindicator.client.compat.BhiMobEffectRef
 import com.wjz.betterhealthindicator.client.compat.BhiGuiGraphics
 import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
+import com.wjz.betterhealthindicator.client.compat.bhiIdentifier
+import com.wjz.betterhealthindicator.client.compat.bhiVanillaIdentifier
+import com.wjz.betterhealthindicator.client.compat.bhiColor
+import com.wjz.betterhealthindicator.client.compat.bhiAppend
+import com.wjz.betterhealthindicator.client.compat.bhiBold
+import com.wjz.betterhealthindicator.client.compat.bhiBoldCopy
+import com.wjz.betterhealthindicator.client.compat.bhiEmpty
+import com.wjz.betterhealthindicator.client.compat.bhiLiteral
+import com.wjz.betterhealthindicator.client.compat.bhiVector3f
+import com.wjz.betterhealthindicator.client.compat.bhiQuaternionX
+import com.wjz.betterhealthindicator.client.compat.bhiQuaternionZ
 import com.wjz.betterhealthindicator.client.compat.bhiBlitMobEffectSprite
 import com.wjz.betterhealthindicator.client.compat.bhiBlitSprite
 import com.wjz.betterhealthindicator.client.compat.bhiBlitTexture
@@ -13,6 +25,7 @@ import com.wjz.betterhealthindicator.client.compat.bhiPushPose
 import com.wjz.betterhealthindicator.client.compat.bhiScale
 import com.wjz.betterhealthindicator.client.compat.bhiText
 import com.wjz.betterhealthindicator.client.compat.bhiTranslate
+import com.wjz.betterhealthindicator.client.compat.bhiWidth
 import com.wjz.betterhealthindicator.client.compat.registerBhiHud
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.client.hud.HealthPanelHud.GLOSS_CELL
@@ -21,15 +34,10 @@ import com.wjz.betterhealthindicator.client.render.*
 import com.wjz.betterhealthindicator.config.*
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
-import net.minecraft.client.renderer.entity.state.LivingEntityRenderState
-import net.minecraft.core.Holder
 import net.minecraft.network.chat.Component
 import net.minecraft.util.Mth
-import net.minecraft.world.effect.MobEffect
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.Pose
-import org.joml.Quaternionf
-import org.joml.Vector3f
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.min
@@ -60,12 +68,12 @@ object HealthPanelHud {
     private const val EFFECT_STEP = EFFECT_BG_SIZE + EFFECT_GAP
 
     // 药水效果的背景容器 sprite（与原版 HUD 同款）：普通 / ambient（信标等环境效果）两种。
-    private val EFFECT_BG_SPRITE = Identifier.withDefaultNamespace("hud/effect_background")
-    private val EFFECT_BG_AMBIENT_SPRITE = Identifier.withDefaultNamespace("hud/effect_background_ambient")
+    private val EFFECT_BG_SPRITE = bhiVanillaIdentifier("hud/effect_background")
+    private val EFFECT_BG_AMBIENT_SPRITE = bhiVanillaIdentifier("hud/effect_background_ambient")
 
     // 自定义模型框贴图（手绘）：放在 assets/better_health_indicator/textures/gui/sprites/frame/ 下，走 GUI 图集。
-    private val FRAME_SQUARE_SPRITE = Identifier.fromNamespaceAndPath("better_health_indicator", "frame/square")
-    private val FRAME_ROUND_SPRITE = Identifier.fromNamespaceAndPath("better_health_indicator", "frame/round")
+    private val FRAME_SQUARE_SPRITE = bhiIdentifier("better_health_indicator", "frame/square")
+    private val FRAME_ROUND_SPRITE = bhiIdentifier("better_health_indicator", "frame/round")
     private const val FRAME_NATIVE_SIZE = 26.0f // 贴图画布尺寸（手绘为 26×26）
     private const val FRAME_NATIVE_BORDER = 2.0f // 方形贴图边框占用像素，用于按比例内缩模型框（按手绘边框粗细微调）
     // 圆形框内模型占「内半径」的比例：圆形能容纳更大模型，故独立于方形单独控制。
@@ -152,7 +160,7 @@ object HealthPanelHud {
 
     fun register() {
         registerBhiHud(
-            Identifier.fromNamespaceAndPath("better_health_indicator", "health_panel"),
+            bhiIdentifier("better_health_indicator", "health_panel"),
         ) render@ { graphics, tickProgress ->
                 val config = ConfigManager.config
                 if (!config.enabled || !config.panelEnabled) return@render
@@ -170,8 +178,7 @@ object HealthPanelHud {
                 // 文本区左沿相对面板左沿的偏移：内边距 + 模型框 + 间隙。
                 val contentLeft = PADDING + FRAME_SIZE + 6
                 // 面板宽度随名字完整宽度在「默认~最大」间自适应；超出最大宽度的名字会被省略。
-                val fullNameWidth =
-                    font.width(if (bold) targetName.copy().withStyle(ChatFormatting.BOLD) else targetName)
+                val fullNameWidth = font.bhiWidth(targetName.bhiBoldCopy(bold))
                 // 心形样式：预先算好布局，使面板宽度能容纳整排爱心。
                 val heartsView = if (config.panelBarStyle == PanelBarStyle.HEARTS)
                     HeartLayout.compute(target.health, target.maxHealth, config) else null
@@ -259,16 +266,15 @@ object HealthPanelHud {
         bold: Boolean,
         maxWidth: Int,
     ): Component {
-        fun styled(s: String): Component =
-            Component.literal(s).apply { if (bold) withStyle(ChatFormatting.BOLD) }
-        val full = if (bold) base.copy().withStyle(ChatFormatting.BOLD) else base
-        if (maxWidth <= 0 || font.width(full) <= maxWidth) return full
+        fun styled(s: String): Component = bhiLiteral(s).bhiBold(bold)
+        val full = base.bhiBoldCopy(bold)
+        if (maxWidth <= 0 || font.bhiWidth(full) <= maxWidth) return full
         val raw = base.string
         val ellipsis = "..."
         var len = raw.length - 1
         while (len > 0) {
             val candidate = styled(raw.substring(0, len) + ellipsis)
-            if (font.width(candidate) <= maxWidth) return candidate
+            if (font.bhiWidth(candidate) <= maxWidth) return candidate
             len--
         }
         return styled(ellipsis)
@@ -282,7 +288,7 @@ object HealthPanelHud {
     }
 
     /** 面板要展示的一个效果：用于绘制的 sprite 来源（效果 Holder）+ 是否环境效果（决定背板）。 */
-    private data class EffectDisplay(val effect: Holder<MobEffect>, val ambient: Boolean)
+    private data class EffectDisplay(val effect: BhiMobEffectRef, val ambient: Boolean)
 
     /**
      * 解析目标当前的状态效果（仅取要展示的），按精确度三级回退：
@@ -295,7 +301,11 @@ object HealthPanelHud {
         // 1) 内置服务器的精确效果（跨线程读取做防御性拷贝）。
         val server = Minecraft.getInstance().singleplayerServer
         if (server != null) {
-            val serverEntity = server.getLevel(target.level().dimension())?.getEntity(target.id)
+            //? if >=1.16 {
+            val serverEntity = server.getLevel(MinecraftCompat.level(target).dimension())?.getEntity(target.id)
+            //?} else {
+            /*val serverEntity: LivingEntity? = null*/
+            //?}
             if (serverEntity is LivingEntity) {
                 val exact = try {
                     ArrayList(serverEntity.activeEffects)
@@ -312,7 +322,7 @@ object HealthPanelHud {
         val particles = MobEffectParticleIndex.syncedParticles(target)
         if (particles.isEmpty()) return emptyList()
         val ambient = MobEffectParticleIndex.allAmbient(target)
-        val seen = LinkedHashSet<Holder<MobEffect>>()
+        val seen = LinkedHashSet<BhiMobEffectRef>()
         for (particle in particles) MobEffectParticleIndex.resolve(particle)?.let { seen.add(it) }
         return seen.map { EffectDisplay(it, ambient) }
     }
@@ -343,7 +353,7 @@ object HealthPanelHud {
         var k = ((maxWidth + EFFECT_GAP) / EFFECT_STEP).coerceAtMost(n - 1)
         while (k > 0 && k * EFFECT_STEP + font.width("+${n - k}") > maxWidth) k--
         for (i in 0 until k) drawEffectIcon(graphics, effects[i], x0 + i * EFFECT_STEP, y)
-        val label = Component.literal("+${n - k}")
+        val label = bhiLiteral("+${n - k}")
         graphics.bhiText(font, label, x0 + k * EFFECT_STEP, y + (EFFECT_BG_SIZE - font.lineHeight) / 2, NAME_COLOR, true)
     }
 
@@ -406,7 +416,7 @@ object HealthPanelHud {
             }
         }
         if (view.multiplier > 0) {
-            val label = Component.literal("× ${view.multiplier}")
+            val label = bhiLiteral("× ${view.multiplier}")
             // 与头顶一致：按倍数分档着色（补足不透明 alpha）。
             val color = 0xFF000000.toInt() or HeartLayout.multiplierColor(view.multiplier)
             graphics.bhiText(font, label, x0 + ordered.size * HEART_STEP + 2, centerY - font.lineHeight / 2, color, true)
@@ -441,16 +451,17 @@ object HealthPanelHud {
         x1: Int,
         y1: Int,
     ) {
+        //? if >=1.21.2 {
         val dispatcher = Minecraft.getInstance().entityRenderDispatcher
         val renderState = dispatcher.getRenderer(entity).createRenderState(entity, 1.0f)
         //? if >=1.21.9 {
         renderState.shadowPieces.clear()
         renderState.outlineColor = 0
         //?}
-        if (renderState is LivingEntityRenderState) {
+        if (renderState is net.minecraft.client.renderer.entity.state.LivingEntityRenderState) {
             // bodyRot：身体绝对朝向，跟随“玩家相对生物的水平视角”，使绕行时面板显示对应侧面/背面。
             // yRot：原版语义为“头相对身体的扭转量并取负”（0 即对齐），故只放头自身扭转，绝不能混入身体朝向。
-            val partialTick = Minecraft.getInstance().deltaTracker.getGameTimeDeltaPartialTick(false)
+            val partialTick = MinecraftCompat.tickProgress(Minecraft.getInstance())
             val headDelta = Mth.degreesDifference(
                 Mth.rotLerp(partialTick, entity.yBodyRotO, entity.yBodyRot),
                 Mth.rotLerp(partialTick, entity.yHeadRotO, entity.yHeadRot),
@@ -462,6 +473,11 @@ object HealthPanelHud {
             renderState.boundingBoxHeight /= renderState.scale
             renderState.scale = 1.0f
         }
+        val renderHeight = renderState.boundingBoxHeight
+        //?} else {
+        /*val renderState = entity
+        val renderHeight = entity.bbHeight*/
+        //?}
 
         // 同时按高度与（最坏角度的）宽度求可放入渲染框的最大缩放，取较小者，确保横宽生物也能完整展示不被裁切。
         val boxWidth = (x1 - x0).toFloat()
@@ -474,9 +490,9 @@ object HealthPanelHud {
         val sizeByHeight = boxHeight * MODEL_FILL_RATIO / verticalExtent
         val sizeByWidth = boxWidth * MODEL_FILL_RATIO / horizontalExtent
         val size = min(sizeByHeight, sizeByWidth).coerceIn(MODEL_MIN_SIZE, MODEL_MAX_SIZE)
-        val translation = Vector3f(0.0f, renderState.boundingBoxHeight / 2.0f + 0.0625f, 0.0f)
-        val rotation = Quaternionf().rotateZ(Mth.PI) //  这里Z轴转一百八，不然渲染出来是倒立的
-        val cameraTilt = Quaternionf().rotateX(MODEL_PITCH * (Mth.PI / 180.0f))
+        val translation = bhiVector3f(0.0f, renderHeight / 2.0f + 0.0625f, 0.0f)
+        val rotation = bhiQuaternionZ(Math.PI.toFloat()) //  这里Z轴转一百八，不然渲染出来是倒立的
+        val cameraTilt = bhiQuaternionX(MODEL_PITCH * (Math.PI.toFloat() / 180.0f))
         rotation.mul(cameraTilt)
         graphics.bhiEntity(entity, renderState, size, translation, rotation, cameraTilt, x0, y0, x1, y1)
     }
@@ -581,14 +597,14 @@ object HealthPanelHud {
         // 内沿 1px 凹陷描边（叠在内容之上）：顶/左阴影 + 底/右高光，使血条像嵌入面板的凹槽。
         drawInsetBevel(graphics, theme, x0, y0, x1, y1)
         // 数值：当前/最大血量随主题取色（深色浅字/浅色深字），分隔符用区分灰；阴影随主题；粗细跟随面板「文本加粗」设置。
-        val text = Component.empty()
-            .append(Component.literal(ceil(health).toInt().toString()).withColor(HEALTH_NUM_TEXT))
-            .append(Component.literal(" / ").withColor(HEALTH_NUM_SEP))
-            .append(Component.literal(ceil(maxHealth).toInt().toString()).withColor(HEALTH_NUM_TEXT))
-            .apply { if (bold) withStyle(ChatFormatting.BOLD) }
+        val text = bhiEmpty()
+            .bhiAppend(bhiLiteral(ceil(health).toInt().toString()).bhiColor(HEALTH_NUM_TEXT))
+            .bhiAppend(bhiLiteral(" / ").bhiColor(HEALTH_NUM_SEP))
+            .bhiAppend(bhiLiteral(ceil(maxHealth).toInt().toString()).bhiColor(HEALTH_NUM_TEXT))
+            .bhiBold(bold)
         // 数字缩小一号：用 2D 矩阵以血条中心为锚点缩放后绘制（MC 字体无原生小字号）。
         val s = HEALTH_NUM_SCALE
-        val tw = font.width(text)
+        val tw = font.bhiWidth(text)
         val centerX = (x0 + x1) / 2f
         val centerY = (y0 + y1) / 2f
         graphics.bhiPushPose()

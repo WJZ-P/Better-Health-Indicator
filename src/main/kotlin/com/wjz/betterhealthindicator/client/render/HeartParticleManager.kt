@@ -4,10 +4,16 @@ import com.wjz.betterhealthindicator.client.compat.BhiIdentifier as Identifier
 import com.wjz.betterhealthindicator.client.compat.BhiWorldCollector
 import com.wjz.betterhealthindicator.client.compat.bhiEntityTranslucent
 import com.wjz.betterhealthindicator.client.compat.bhiSubmitGeometry
+import com.wjz.betterhealthindicator.client.compat.BhiQuaternionf
+import com.wjz.betterhealthindicator.client.compat.bhiQuaternionZ
+import com.wjz.betterhealthindicator.client.compat.bhiTransform
+import com.wjz.betterhealthindicator.client.compat.bhiVector3f
+import com.wjz.betterhealthindicator.client.compat.bhiLength
+import com.wjz.betterhealthindicator.client.compat.bhiX
+import com.wjz.betterhealthindicator.client.compat.bhiY
+import com.wjz.betterhealthindicator.client.compat.bhiZ
 import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.world.phys.Vec3
-import org.joml.Quaternionf
-import org.joml.Vector3f
 import java.util.Random
 import kotlin.math.cos
 import kotlin.math.exp
@@ -208,7 +214,7 @@ object HeartParticleManager {
         centerX: Double,
         centerY: Double,
         centerZ: Double,
-        orientation: Quaternionf,
+        orientation: BhiQuaternionf,
         texture: Identifier,
     ) {
         val size = HeartGraphics.SIZE
@@ -220,17 +226,17 @@ object HeartParticleManager {
                 // 格中心的局部坐标（-size/2..size/2）；billboard 用 scale(-,-,+)，故 x、y 取负号映射到世界。
                 val localX = (i + 0.5f) / SHARD_GRID * size - size / 2.0f
                 val localY = (j + 0.5f) / SHARD_GRID * size - size / 2.0f
-                val off = Vector3f(-SCALE * localX, -SCALE * localY, 0.0f)
-                orientation.transform(off)
+                val off = bhiVector3f(-SCALE * localX, -SCALE * localY, 0.0f)
+                orientation.bhiTransform(off)
                 // 径向爆裂方向 = 该格相对心中心的世界方向（即 off 的方向）；中心格退化为随机方向。
-                val len = off.length()
+                val len = off.bhiLength()
                 val dirX: Double
                 val dirY: Double
                 val dirZ: Double
                 if (len > 1.0e-6f) {
-                    dirX = off.x.toDouble() / len
-                    dirY = off.y.toDouble() / len
-                    dirZ = off.z.toDouble() / len
+                    dirX = off.bhiX().toDouble() / len
+                    dirY = off.bhiY().toDouble() / len
+                    dirZ = off.bhiZ().toDouble() / len
                 } else {
                     val a = random.nextDouble() * Math.PI * 2.0
                     dirX = cos(a)
@@ -254,9 +260,9 @@ object HeartParticleManager {
                 // jx/jz 是世界水平分量（屏幕左右），单独放大让碎片明显朝两边飞；jy 为竖直分量。
                 shards.add(
                     Shard(
-                        centerX + off.x,
-                        centerY + off.y,
-                        centerZ + off.z,
+                        centerX + off.bhiX(),
+                        centerY + off.bhiY(),
+                        centerZ + off.bhiZ(),
                         jx * speed * SHARD_HORIZONTAL_BOOST,
                         jy * speed + upPop, // 叠加（随机）向上初速，先扬起再坠落
                         jz * speed * SHARD_HORIZONTAL_BOOST,
@@ -324,7 +330,7 @@ object HeartParticleManager {
         collector: BhiWorldCollector,
         poseStack: PoseStack,
         cameraPosition: Vec3,
-        cameraOrientation: Quaternionf,
+        cameraOrientation: BhiQuaternionf,
         partialTick: Float,
     ) {
         val halfSize = HeartGraphics.SIZE / 2.0f
@@ -364,7 +370,7 @@ object HeartParticleManager {
                 poseStack.scale(-SCALE, -SCALE, SCALE)
                 // 在 billboard 局部空间施加摆动与倾斜：横向平移恒为屏幕水平，倾斜绕屏幕法线，读作“晃动/抖动”。
                 poseStack.translate(swayLocal.toDouble(), 0.0, 0.0)
-                poseStack.mulPose(Quaternionf().rotationZ(tiltRad))
+                poseStack.mulPose(bhiQuaternionZ(tiltRad))
                 collector.bhiSubmitGeometry(poseStack, bhiEntityTranslucent(texture)) { pose, consumer ->
                     HeartGraphics.quad(consumer, pose.pose(), -halfSize, -halfSize, halfSize, halfSize, color, p.flipU)
                 }
@@ -380,7 +386,7 @@ object HeartParticleManager {
         collector: BhiWorldCollector,
         poseStack: PoseStack,
         cameraPosition: Vec3,
-        cameraOrientation: Quaternionf,
+        cameraOrientation: BhiQuaternionf,
         partialTick: Float,
     ) {
         for (s in shards) {
@@ -407,7 +413,7 @@ object HeartParticleManager {
                 val dz = pz - cameraPosition.z
                 poseStack.translate(dx * (1.0 - FRONT_FRACTION), dy * (1.0 - FRONT_FRACTION), dz * (1.0 - FRONT_FRACTION))
                 poseStack.mulPose(cameraOrientation)
-                poseStack.mulPose(Quaternionf().rotationZ(rot)) // 翻滚自旋
+                poseStack.mulPose(bhiQuaternionZ(rot)) // 翻滚自旋
                 poseStack.scale(-SCALE, -SCALE, SCALE)
                 collector.bhiSubmitGeometry(poseStack, bhiEntityTranslucent(s.texture)) { pose, consumer ->
                     HeartGraphics.quadUv(consumer, pose.pose(), -h, -h, h, h, s.u0, s.v0, s.u1, s.v1, color)
