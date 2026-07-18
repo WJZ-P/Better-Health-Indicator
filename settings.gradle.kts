@@ -51,6 +51,7 @@ stonecutter {
         // 因此 NeoForge 节点使用带加载器前缀的项目名，同时继续按 26.1.2
         // 处理共享源码中的版本条件。
         version("neoforge-26.1.2", "26.1.2").buildscript("build-neoforge.gradle.kts")
+        version("neoforge-1.21.11", "1.21.11").buildscript("build-neoforge.gradle.kts")
         vcsVersion = "26.1.2"
     }
 }
