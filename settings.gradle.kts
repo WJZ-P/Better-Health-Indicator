@@ -8,6 +8,10 @@ pluginManagement {
             name = "LegacyFabric"
             url = uri("https://repo.legacyfabric.net/repository/legacyfabric/")
         }
+        maven {
+            name = "NeoForged"
+            url = uri("https://maven.neoforged.net/releases/")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -42,6 +46,11 @@ stonecutter {
 
         // 26.1 起 Minecraft 官方发布物不再混淆，使用非重映射 Loom。
         versions("26.1.2", "26.2").buildscript("build.gradle.kts")
+
+        // Stonecutter 的项目标识必须唯一，但实际 Minecraft 版本仍可相同。
+        // 因此 NeoForge 节点使用带加载器前缀的项目名，同时继续按 26.1.2
+        // 处理共享源码中的版本条件。
+        version("neoforge-26.1.2", "26.1.2").buildscript("build-neoforge.gradle.kts")
         vcsVersion = "26.1.2"
     }
 }

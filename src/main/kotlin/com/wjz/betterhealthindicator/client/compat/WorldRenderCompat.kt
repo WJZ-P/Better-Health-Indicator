@@ -68,10 +68,15 @@ typealias BhiRenderType = net.minecraft.client.renderer.RenderType*/
 //?}
 
 fun bhiEntityCutout(texture: BhiIdentifier): BhiRenderType {
-    //? if >=1.21.9 {
+    //? if >=26.1 {
+    // 26.1 的官方命名为 entityCutout；其管线仍关闭背面剔除。
+    return net.minecraft.client.renderer.rendertype.RenderTypes.entityCutout(texture)
+    //?} else if >=1.21.9 {
+    /*
     // Submit-node billboards can face either winding depending on the camera transform.
     // Disable face culling so the health hearts remain visible on both sides.
     return net.minecraft.client.renderer.rendertype.RenderTypes.entityCutoutNoCull(texture)
+    */
     //?} else {
     /*return net.minecraft.client.renderer.RenderType.entityCutout(texture)*/
     //?}
