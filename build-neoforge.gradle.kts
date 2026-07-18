@@ -9,6 +9,10 @@ plugins {
     id("net.neoforged.moddev") version "2.0.142"
 }
 
+stonecutter {
+    constants.put("neoforge", true)
+}
+
 val versionProperties = Properties().apply {
     project.file("gradle.properties").inputStream().use(::load)
 }
@@ -56,15 +60,19 @@ kotlin {
     jvmToolchain(requiredJava)
     sourceSets.named("main") {
         kotlin.srcDir(neoForgeMain.dir("kotlin"))
-        // 这三个实现属于 Fabric；NeoForge 提供自己的入口和平台桥接。
+        // 这两个实现属于 Fabric；NeoForge 提供自己的入口。
         kotlin.exclude("com/wjz/betterhealthindicator/BetterHealthIndicatorClient.kt")
         kotlin.exclude("com/wjz/betterhealthindicator/client/gui/ModMenuIntegration.kt")
-        kotlin.exclude("com/wjz/betterhealthindicator/platform/BhiPlatformHooks.kt")
     }
 }
 
 neoForge {
-    version = neoForgeVersion
+    // 本项目只依赖可编译/运行的补丁后字节码，不需要反编译 Minecraft 源码。
+    // 使用官方二进制补丁管线可显著降低首次配置的耗时和内存占用。
+    enable {
+        version = neoForgeVersion
+        setDisableRecompilation(true)
+    }
 
     runs {
         create("client") {

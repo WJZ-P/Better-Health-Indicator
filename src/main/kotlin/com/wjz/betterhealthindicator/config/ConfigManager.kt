@@ -2,7 +2,7 @@ package com.wjz.betterhealthindicator.config
 
 import com.google.gson.GsonBuilder
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
-//? if >=26.1 {
+//? if neoforge || >=26.1 {
 import com.wjz.betterhealthindicator.platform.BhiPlatformHooks
 //?} else {
 /*
@@ -23,7 +23,7 @@ import kotlin.io.path.exists
 object ConfigManager {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val configPath: Path =
-        //? if >=26.1 {
+        //? if neoforge || >=26.1 {
         BhiPlatformHooks.configDirectory().resolve("better_health_indicator.json")
         //?} else {
         /*

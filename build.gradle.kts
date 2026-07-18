@@ -8,6 +8,10 @@ plugins {
     `maven-publish`
 }
 
+stonecutter {
+    constants.put("neoforge", false)
+}
+
 fun prop(key: String): String = project.property(key) as String
 
 val minecraftVersion = stonecutter.current.version

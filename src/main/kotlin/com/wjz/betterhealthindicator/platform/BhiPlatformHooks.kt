@@ -1,6 +1,6 @@
 package com.wjz.betterhealthindicator.platform
 
-//? if >=26.1 {
+//? if !neoforge && >=26.1 {
 import com.wjz.betterhealthindicator.client.compat.BhiGuiGraphics
 import com.wjz.betterhealthindicator.client.compat.BhiIdentifier
 import com.wjz.betterhealthindicator.client.compat.BhiWorldRenderContext

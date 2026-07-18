@@ -41,6 +41,24 @@ class BhiWorldRenderContext(
     fun submitNodeCollector(): net.minecraft.client.renderer.SubmitNodeCollector = collector
     fun levelState(): net.minecraft.client.renderer.state.level.LevelRenderState = state
 }
+//?} else if neoforge {
+/*
+/**
+ * NeoForge 1.20–1.21 的世界渲染阶段仍直接写入缓冲；把事件提供的对象
+ * 收拢为与旧版渲染分支一致的最小上下文。
+ */
+class BhiWorldRenderContext(
+    private val stack: PoseStack,
+    private val bufferSource: net.minecraft.client.renderer.MultiBufferSource,
+    private val renderCamera: net.minecraft.client.Camera,
+    private val renderFrustum: net.minecraft.client.renderer.culling.Frustum?,
+) {
+    fun matrixStack(): PoseStack = stack
+    fun consumers(): net.minecraft.client.renderer.MultiBufferSource = bufferSource
+    fun camera(): net.minecraft.client.Camera = renderCamera
+    fun frustum(): net.minecraft.client.renderer.culling.Frustum? = renderFrustum
+}
+*/
 //?} else if >=1.21.9 {
 /*typealias BhiWorldRenderContext = net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext*/
 //?} else if >=1.16 {
@@ -58,13 +76,22 @@ class BhiWorldRenderContext(
 }*/
 //?}
 
-// 1.21.9 起世界渲染改为提交节点；1.21.8 及更早版本直接写入顶点缓冲。
-//? if >=1.21.9 {
+// Fabric 1.21.9+ 与所有 26.1+ 目标使用提交节点；较早的 NeoForge
+// 没有全局提交事件，因此在渲染阶段直接写入 MultiBufferSource。
+//? if >=26.1 {
 typealias BhiWorldCollector = net.minecraft.client.renderer.SubmitNodeCollector
+//?} else if neoforge {
+/*typealias BhiWorldCollector = net.minecraft.client.renderer.MultiBufferSource*/
+//?} else if >=1.21.9 {
+/*typealias BhiWorldCollector = net.minecraft.client.renderer.SubmitNodeCollector*/
+//?} else {
+/*typealias BhiWorldCollector = net.minecraft.client.renderer.MultiBufferSource*/
+//?}
+
+//? if >=1.21.9 {
 typealias BhiRenderType = net.minecraft.client.renderer.rendertype.RenderType
 //?} else {
-/*typealias BhiWorldCollector = net.minecraft.client.renderer.MultiBufferSource
-typealias BhiRenderType = net.minecraft.client.renderer.RenderType*/
+/*typealias BhiRenderType = net.minecraft.client.renderer.RenderType*/
 //?}
 
 fun bhiEntityCutout(texture: BhiIdentifier): BhiRenderType {
@@ -95,8 +122,12 @@ fun BhiWorldCollector.bhiSubmitGeometry(
     renderType: BhiRenderType,
     renderer: (PoseStack.Pose, VertexConsumer) -> Unit,
 ) {
-    //? if >=1.21.9 {
+    //? if >=26.1 {
     this.submitCustomGeometry(poseStack, renderType) { pose, consumer -> renderer(pose, consumer) }
+    //?} else if neoforge {
+    /*renderer(poseStack.last(), this.getBuffer(renderType))*/
+    //?} else if >=1.21.9 {
+    /*this.submitCustomGeometry(poseStack, renderType) { pose, consumer -> renderer(pose, consumer) }*/
     //?} else {
     /*renderer(poseStack.last(), this.getBuffer(renderType))*/
     //?}
@@ -115,8 +146,12 @@ fun BhiWorldCollector.bhiSubmitText(
     backgroundColor: Int,
     outlineColor: Int,
 ) {
-    //? if >=1.21.9 {
+    //? if >=26.1 {
     this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)
+    //?} else if neoforge {
+    /*font.drawInBatch(text, x, y, color, shadow, poseStack.last().pose(), this, displayMode.vanilla(), backgroundColor, light)*/
+    //?} else if >=1.21.9 {
+    /*this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)*/
     //?} else if >=1.19 {
     /*font.drawInBatch(text, x, y, color, shadow, poseStack.last().pose(), this, displayMode.vanilla(), backgroundColor, light)*/
     //?} else if >=1.16 {

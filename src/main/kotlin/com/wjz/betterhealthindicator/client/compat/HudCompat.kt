@@ -1,6 +1,6 @@
 package com.wjz.betterhealthindicator.client.compat
 
-//? if >=26.1 {
+//? if neoforge || >=26.1 {
 import com.wjz.betterhealthindicator.platform.BhiPlatformHooks
 //?}
 
@@ -9,7 +9,7 @@ fun registerBhiHud(
     id: BhiIdentifier,
     renderer: (BhiGuiGraphics, Float) -> Unit,
 ) {
-    //? if >=26.1 {
+    //? if neoforge || >=26.1 {
     BhiPlatformHooks.registerHud(id, renderer)
     //?} else if >=1.21.5 {
     /*
