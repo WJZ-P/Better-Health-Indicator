@@ -52,6 +52,7 @@ stonecutter {
         // 处理共享源码中的版本条件。
         version("neoforge-26.1.2", "26.1.2").buildscript("build-neoforge.gradle.kts")
         version("neoforge-1.21.11", "1.21.11").buildscript("build-neoforge.gradle.kts")
+        version("neoforge-1.21.1", "1.21.1").buildscript("build-neoforge.gradle.kts")
         vcsVersion = "26.1.2"
     }
 }

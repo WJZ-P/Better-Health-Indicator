@@ -114,6 +114,8 @@ object MinecraftCompat {
     fun tickProgress(minecraft: Minecraft): Float {
         //? if >=1.21.2 {
         return minecraft.deltaTracker.getGameTimeDeltaPartialTick(false)
+        //?} else if neoforge && >=1.21 {
+        /*return minecraft.timer.getGameTimeDeltaPartialTick(false)*/
         //?} else {
         /*return minecraft.frameTime*/
         //?}
