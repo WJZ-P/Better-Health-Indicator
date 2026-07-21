@@ -10,7 +10,10 @@ plugins {
 }
 
 stonecutter {
+    constants.put("fabric", false)
+    constants.put("forge", false)
     constants.put("neoforge", true)
+    constants.put("forge_like", true)
 }
 
 val versionProperties = Properties().apply {
@@ -26,6 +29,8 @@ val minecraftVersion = versionProp("minecraft_version")
 val minecraftVersionRange = versionProp("minecraft_version_range")
 val neoForgeVersion = versionProp("neo_version")
 val neoForgeVersionRange = versionProp("neo_version_range")
+val kotlinForForgeVersion = versionProp("kotlin_for_forge_version")
+val kotlinForForgeLoaderRange = versionProp("kotlin_for_forge_loader_range")
 val clothConfigVersion = versionProp("cloth_config_version")
 val requiredJava = versionProp("java_version").toInt()
 val modId = commonProp("mod_id")
@@ -38,6 +43,13 @@ base {
 }
 
 repositories {
+    maven {
+        name = "KotlinForForge"
+        url = uri("https://thedarkcolour.github.io/KotlinForForge/")
+        content {
+            includeGroup("thedarkcolour")
+        }
+    }
     maven {
         name = "Shedaniel"
         url = uri("https://maven.shedaniel.me/")
@@ -95,9 +107,8 @@ configurations.named("runtimeClasspath") {
 }
 
 dependencies {
-    // Kotlin 运行库以内嵌 Jar-in-Jar 方式随 Mod 发布，不要求玩家额外安装 KotlinForForge。
-    add("implementation", "org.jetbrains.kotlin:kotlin-stdlib:2.3.21")
-    add("jarJar", "org.jetbrains.kotlin:kotlin-stdlib:[2.3.21]")
+    // Kotlin 运行库由玩家统一安装的 KotlinForForge 提供，避免每个 Mod 重复内嵌。
+    add("implementation", "thedarkcolour:kotlinforforge-neoforge:$kotlinForForgeVersion")
 
     // Cloth Config 是可选依赖：安装后，NeoForge 的 Mods 页面会出现配置按钮。
     add("compileOnly", "me.shedaniel.cloth:cloth-config-neoforge:$clothConfigVersion")
@@ -111,6 +122,7 @@ tasks.processResources {
         "minecraft_version_range" to minecraftVersionRange,
         "neo_version" to neoForgeVersion,
         "neo_version_range" to neoForgeVersionRange,
+        "kotlin_for_forge_loader_range" to kotlinForForgeLoaderRange,
         "cloth_config_version" to clothConfigVersion,
         "java_version" to requiredJava,
         "mod_id" to modId,

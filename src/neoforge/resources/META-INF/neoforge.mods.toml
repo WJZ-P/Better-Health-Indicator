@@ -1,3 +1,5 @@
+modLoader="kotlinforforge"
+loaderVersion="${kotlin_for_forge_loader_range}"
 license="${mod_license}"
 
 [[mods]]
