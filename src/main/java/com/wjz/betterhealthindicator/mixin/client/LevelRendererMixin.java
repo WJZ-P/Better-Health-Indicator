@@ -8,10 +8,37 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+//? if forge && >=1.21.9 {
+/*import com.mojang.blaze3d.vertex.PoseStack;
+import com.wjz.betterhealthindicator.platform.BhiPlatformHooks;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+//? if >=26.1 {
+import net.minecraft.client.renderer.state.level.LevelRenderState;
+//?} else {
+import net.minecraft.client.renderer.state.LevelRenderState;
+//?}
+*/
+//?}
 
 /** 1.15 世界渲染回调的兼容入口；1.16+ 是无注入的空 Mixin。 */
+//? if forge {
+/*@Mixin(value = LevelRenderer.class, remap = false)*/
+//?} else {
 @Mixin(LevelRenderer.class)
+//?}
 public class LevelRendererMixin {
+    //? if forge && >=1.21.9 {
+    /*@Inject(method = "submitEntities", at = @At("RETURN"))
+    private void betterHealthIndicator$collectForgeSubmits(
+            PoseStack poseStack,
+            LevelRenderState state,
+            SubmitNodeCollector collector,
+            CallbackInfo ci
+    ) {
+        BhiPlatformHooks.dispatchLevelRender(poseStack, collector, state);
+    }
+    */
+    //?}
     //? if >=1.15 && <1.16 {
     /*@Inject(method = "renderLevel", at = @At("TAIL"))
     private void betterHealthIndicator$renderLegacy(

@@ -26,7 +26,7 @@ import com.mojang.blaze3d.vertex.PoseStack
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.ConfigManager
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
-//? if neoforge || >=26.1 {
+//? if forge_like || >=26.1 {
 import com.wjz.betterhealthindicator.platform.BhiPlatformHooks
 //?} else {
 /*
@@ -196,7 +196,7 @@ object EntityHealthBarRenderer {
     }
 
     fun register() {
-        //? if neoforge || >=26.1 {
+        //? if forge_like || >=26.1 {
         BhiPlatformHooks.registerLevelRender(::collect)
         //?} else if >=1.21.9 {
         /*net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BEFORE_ENTITIES.register(
@@ -210,7 +210,7 @@ object EntityHealthBarRenderer {
         /*// 1.15 尚无 WorldRenderEvents；由 LevelRendererMixin 在世界帧末尾调用 renderLegacy。*/
         //?}
         // 掉血检测属于游戏状态采样，放在固定 20Hz 的客户端 tick，避免随帧率空转，并与渲染职责分离。
-        //? if neoforge || >=26.1 {
+        //? if forge_like || >=26.1 {
         BhiPlatformHooks.registerEndClientTick(::tickDamageDetection)
         //?} else {
         /*
@@ -298,7 +298,15 @@ object EntityHealthBarRenderer {
         val cameraState = context.levelState().cameraRenderState
         val cameraOrientation = cameraState.orientation
         val cullFrustum = cameraState.cullFrustum
-        //?} else if neoforge {
+        //?} else if forge && >=1.21.9 {
+        /*val poseStack = context.poseStack()
+        val collector = context.submitNodeCollector()
+        val cameraState = context.levelState().cameraRenderState
+        val cameraOrientation = cameraState.orientation
+        // Forge 1.21.11 does not expose the extraction frustum in CameraRenderState.
+        // EntitySelector falls back to its stable camera-cone test when this is null.
+        val cullFrustum: Frustum? = null*/
+        //?} else if forge_like {
         /*val poseStack = context.matrixStack()
         val collector = context.consumers()
         val cameraOrientation = context.camera().rotation()

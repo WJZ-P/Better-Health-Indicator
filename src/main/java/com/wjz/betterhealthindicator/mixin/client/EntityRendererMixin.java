@@ -18,7 +18,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * 仅当本模组本帧确实绘制了该实体的血条时返回 {@code false}（只隐藏、
  * 绝不强显），因此对未被本模组绘制血条的实体（超距 / 未注视 / 被过滤）保持原版行为，名字不会凭空消失。</p>
  */
+//? if forge {
+/*@Mixin(value = EntityRenderer.class, remap = false)*/
+//?} else {
 @Mixin(EntityRenderer.class)
+//?}
 public class EntityRendererMixin {
     //? if >=1.21.2 {
     @Inject(

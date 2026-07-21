@@ -10,7 +10,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** 1.14 及更早 HUD 回调的兼容入口；新版本为空 Mixin。 */
+//? if forge {
+/*@Mixin(value = Gui.class, remap = false)*/
+//?} else {
 @Mixin(Gui.class)
+//?}
 public class GuiMixin {
     //? if <1.15 {
     /*@Inject(method = "render", at = @At("TAIL"))

@@ -8,7 +8,10 @@ plugins {
 }
 
 stonecutter {
+    constants.put("fabric", true)
+    constants.put("forge", false)
     constants.put("neoforge", false)
+    constants.put("forge_like", false)
 }
 
 fun prop(key: String): String = project.property(key) as String

@@ -12,6 +12,10 @@ pluginManagement {
             name = "NeoForged"
             url = uri("https://maven.neoforged.net/releases/")
         }
+        maven {
+            name = "Forge"
+            url = uri("https://maven.minecraftforge.net/")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -53,6 +57,9 @@ stonecutter {
         version("neoforge-26.1.2", "26.1.2").buildscript("build-neoforge.gradle.kts")
         version("neoforge-1.21.11", "1.21.11").buildscript("build-neoforge.gradle.kts")
         version("neoforge-1.21.1", "1.21.1").buildscript("build-neoforge.gradle.kts")
+        version("forge-26.1.2", "26.1.2").buildscript("build-forge.gradle.kts")
+        version("forge-1.21.11", "1.21.11").buildscript("build-forge.gradle.kts")
+        version("forge-1.21.1", "1.21.1").buildscript("build-forge.gradle.kts")
         vcsVersion = "26.1.2"
     }
 }

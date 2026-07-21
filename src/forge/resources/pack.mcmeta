@@ -1,0 +1,6 @@
+{
+  "pack": {
+    "description": "${mod_name} resources",
+    ${resource_pack_metadata}
+  }
+}

@@ -2,7 +2,7 @@ package com.wjz.betterhealthindicator.client.render
 
 import com.wjz.betterhealthindicator.BetterHealthIndicatorLogger
 import com.wjz.betterhealthindicator.config.HealthIndicatorConfig
-//? if neoforge || >=26.1 {
+//? if forge_like || >=26.1 {
 import com.wjz.betterhealthindicator.platform.BhiPlatformHooks
 //?} else {
 /*
@@ -31,7 +31,7 @@ object AttackTracker {
     private var lastAttackAtMs: Long = 0L
 
     fun register() {
-        //? if neoforge || >=26.1 {
+        //? if forge_like || >=26.1 {
         BhiPlatformHooks.registerAttack(::onAttack)
         //?} else {
         /*

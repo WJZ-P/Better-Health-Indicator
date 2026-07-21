@@ -41,7 +41,20 @@ class BhiWorldRenderContext(
     fun submitNodeCollector(): net.minecraft.client.renderer.SubmitNodeCollector = collector
     fun levelState(): net.minecraft.client.renderer.state.level.LevelRenderState = state
 }
-//?} else if neoforge {
+//?} else if forge && >=1.21.9 {
+/*
+/** Forge 1.21.9+ 提交节点渲染上下文；由 LevelRendererMixin 在实体提交完成后派发。 */
+class BhiWorldRenderContext(
+    private val stack: PoseStack,
+    private val collector: net.minecraft.client.renderer.SubmitNodeCollector,
+    private val state: net.minecraft.client.renderer.state.LevelRenderState,
+) {
+    fun poseStack(): PoseStack = stack
+    fun submitNodeCollector(): net.minecraft.client.renderer.SubmitNodeCollector = collector
+    fun levelState(): net.minecraft.client.renderer.state.LevelRenderState = state
+}
+*/
+//?} else if forge_like {
 /*
 /**
  * NeoForge 1.20–1.21 的世界渲染阶段仍直接写入缓冲；把事件提供的对象
@@ -80,7 +93,9 @@ class BhiWorldRenderContext(
 // 没有全局提交事件，因此在渲染阶段直接写入 MultiBufferSource。
 //? if >=26.1 {
 typealias BhiWorldCollector = net.minecraft.client.renderer.SubmitNodeCollector
-//?} else if neoforge {
+//?} else if forge && >=1.21.9 {
+/*typealias BhiWorldCollector = net.minecraft.client.renderer.SubmitNodeCollector*/
+//?} else if forge_like {
 /*typealias BhiWorldCollector = net.minecraft.client.renderer.MultiBufferSource*/
 //?} else if >=1.21.9 {
 /*typealias BhiWorldCollector = net.minecraft.client.renderer.SubmitNodeCollector*/
@@ -104,6 +119,12 @@ fun bhiEntityCutout(texture: BhiIdentifier): BhiRenderType {
     // Disable face culling so the health hearts remain visible on both sides.
     return net.minecraft.client.renderer.rendertype.RenderTypes.entityCutoutNoCull(texture)
     */
+    //?} else if forge_like {
+    /*
+    // The legacy NeoForge render-stage matrix can expose either billboard winding.
+    // Keep world-space hearts visible from both sides, just like the submit-node path.
+    return net.minecraft.client.renderer.RenderType.entityCutoutNoCull(texture)
+    */
     //?} else {
     /*return net.minecraft.client.renderer.RenderType.entityCutout(texture)*/
     //?}
@@ -124,7 +145,9 @@ fun BhiWorldCollector.bhiSubmitGeometry(
 ) {
     //? if >=26.1 {
     this.submitCustomGeometry(poseStack, renderType) { pose, consumer -> renderer(pose, consumer) }
-    //?} else if neoforge {
+    //?} else if forge && >=1.21.9 {
+    /*this.submitCustomGeometry(poseStack, renderType) { pose, consumer -> renderer(pose, consumer) }*/
+    //?} else if forge_like {
     /*renderer(poseStack.last(), this.getBuffer(renderType))*/
     //?} else if >=1.21.9 {
     /*this.submitCustomGeometry(poseStack, renderType) { pose, consumer -> renderer(pose, consumer) }*/
@@ -148,7 +171,9 @@ fun BhiWorldCollector.bhiSubmitText(
 ) {
     //? if >=26.1 {
     this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)
-    //?} else if neoforge {
+    //?} else if forge && >=1.21.9 {
+    /*this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)*/
+    //?} else if forge_like {
     /*font.drawInBatch(text, x, y, color, shadow, poseStack.last().pose(), this, displayMode.vanilla(), backgroundColor, light)*/
     //?} else if >=1.21.9 {
     /*this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)*/
