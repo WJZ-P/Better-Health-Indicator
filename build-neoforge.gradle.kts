@@ -13,6 +13,7 @@ stonecutter {
     constants.put("fabric", false)
     constants.put("forge", false)
     constants.put("neoforge", true)
+    constants.put("netease", false)
     constants.put("forge_like", true)
 }
 

@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * {@code hideVanillaDamageParticles} 取消生成（返回 {@code null}），避免与本模组自绘的掉血爱心
  * 粒子重叠冲突；默认隐藏。</p>
  */
-//? if forge {
+//? if forge && >=1.20.5 {
 /*@Mixin(value = ParticleEngine.class, remap = false)*/
 //?} else {
 @Mixin(ParticleEngine.class)

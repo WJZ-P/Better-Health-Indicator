@@ -2,12 +2,12 @@ package com.wjz.betterhealthindicator.client.render
 
 import com.wjz.betterhealthindicator.client.compat.MinecraftCompat
 import com.wjz.betterhealthindicator.client.compat.BhiMobEffectRef
-//? if >=1.21 {
+//? if >=1.20.5 {
 import net.minecraft.core.Holder
 import net.minecraft.core.particles.ColorParticleOption
 //?}
 import net.minecraft.core.particles.ParticleOptions
-//? if >=1.21 {
+//? if >=1.20.5 {
 import net.minecraft.core.particles.ParticleType
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.syncher.EntityDataAccessor
@@ -29,7 +29,7 @@ import net.minecraft.world.entity.LivingEntity
  * - 走自定义粒子类型（如不祥之兆/袭击之兆）的效果：按粒子类型建表，天然唯一、更精确。
  */
 object MobEffectParticleIndex {
-    //? if >=1.21 {
+    //? if >=1.20.5 {
     private val colorToEffect = HashMap<Int, Holder<MobEffect>>()
     private val typeToEffect = HashMap<ParticleType<*>, Holder<MobEffect>>()
 
@@ -43,13 +43,13 @@ object MobEffectParticleIndex {
 
     /** mod 加载时调用以预热映射表（幂等；失败则留待首次使用时重试）。 */
     fun init() {
-        //? if >=1.21 {
+        //? if >=1.20.5 {
         build()
         //?}
     }
 
     private fun build() {
-        //? if >=1.21 {
+        //? if >=1.20.5 {
         if (built) return
         synchronized(this) {
             if (built) return
@@ -80,7 +80,7 @@ object MobEffectParticleIndex {
 
     /** 把一个效果粒子反查为对应的状态效果；无法识别（撞色被排除 / 未登记）时返回 null。 */
     fun resolve(particle: ParticleOptions): BhiMobEffectRef? {
-        //? if >=1.21 {
+        //? if >=1.20.5 {
         build()
         return if (particle is ColorParticleOption) colorToEffect[rgbOf(particle)] else typeToEffect[particle.type]
         //?} else {
@@ -90,7 +90,7 @@ object MobEffectParticleIndex {
 
     /** 读取实体经同步下发的效果粒子列表（客户端对任意被追踪实体均可用）；不可用时返回空。 */
     fun syncedParticles(entity: LivingEntity): List<ParticleOptions> {
-        //? if >=1.21 {
+        //? if >=1.20.5 {
         val accessor = particlesAccessor ?: return emptyList()
         return try {
             entity.entityData.get(accessor)
@@ -104,7 +104,7 @@ object MobEffectParticleIndex {
 
     /** 该实体的同步效果是否「全部为环境(ambient)效果」（用于选择普通/ambient 背板）。 */
     fun allAmbient(entity: LivingEntity): Boolean {
-        //? if >=1.21 {
+        //? if >=1.20.5 {
         val accessor = ambienceAccessor ?: return false
         return try {
             entity.entityData.get(accessor)
@@ -116,7 +116,7 @@ object MobEffectParticleIndex {
         //?}
     }
 
-    //? if >=1.21 {
+    //? if >=1.20.5 {
     private fun rgbOf(particle: ColorParticleOption): Int {
         val r = (particle.red * 255.0f).toInt().coerceIn(0, 255)
         val g = (particle.green * 255.0f).toInt().coerceIn(0, 255)

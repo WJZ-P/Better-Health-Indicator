@@ -1,0 +1,6 @@
+{
+  "pack": {
+    "description": "Better Health Indicator resources (NetEase ${netease_version})",
+    "pack_format": ${resource_pack_format}
+  }
+}

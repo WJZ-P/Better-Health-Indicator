@@ -53,6 +53,10 @@ object BhiPlatformHooks {
             val minecraft = Minecraft.getInstance()
             renderAtStage(event.poseStack, MinecraftCompat.mainCamera(minecraft), null)
         }
+        //?} else if >=1.21.8 {
+        /*NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent.AfterEntities::class.java) { event ->
+            renderAtStage(event.poseStack, event.camera, event.frustum)
+        }*/
         //?} else {
         /*NeoForge.EVENT_BUS.addListener(RenderLevelStageEvent::class.java) { event ->
             if (event.stage == RenderLevelStageEvent.Stage.AFTER_ENTITIES) {

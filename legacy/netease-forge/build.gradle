@@ -1,0 +1,92 @@
+plugins {
+    id 'xyz.wagyourtail.unimined' version '1.4.1' apply false
+}
+
+def repositoryRoot = rootProject.file('../..')
+def commonProperties = new Properties()
+new File(repositoryRoot, 'gradle.properties').withInputStream { commonProperties.load(it) }
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'xyz.wagyourtail.unimined'
+
+    group = commonProperties.getProperty('mod_group')
+
+    version = "${commonProperties.getProperty('mod_version')}+netease${project.netease_version}"
+
+    base {
+        archivesName = "${commonProperties.getProperty('mod_id')}-netease-${project.netease_version}"
+    }
+
+    repositories {
+        maven { url = uri('https://maven.minecraftforge.net/') }
+        mavenCentral()
+    }
+
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+
+    sourceSets {
+        main {
+            def legacyJavaDirs = [
+                new File(repositoryRoot, "src/neteaselegacy-old/${project.name}/java"),
+                new File(repositoryRoot, 'src/neteaselegacy-common/java')
+            ]
+            if (project.name in ['netease-1.12.2', 'netease-1.11.2']) {
+                legacyJavaDirs.add(new File(repositoryRoot, 'src/neteaselegacy-old/common-1.11-1.12/java'))
+            }
+            java.srcDirs = legacyJavaDirs
+            resources.srcDirs = [new File(repositoryRoot, 'src/neteaselegacy-old/resources')]
+        }
+    }
+
+    unimined.minecraft {
+        version project.minecraft_version
+        side 'combined'
+
+        mappings {
+            searge()
+            mcp(project.mcp_mapping_channel, project.mcp_mapping_version)
+        }
+
+        minecraftForge {
+            loader project.forge_version
+        }
+    }
+
+    tasks.named('compileJava', JavaCompile) {
+        options.encoding = 'UTF-8'
+        options.release = 8
+    }
+
+    tasks.named('processResources', ProcessResources) {
+        def replaceProperties = [
+            version             : project.version,
+            netease_version     : project.netease_version,
+            minecraft_version   : project.minecraft_version,
+            resource_pack_format: project.resource_pack_format,
+            mod_id              : commonProperties.getProperty('mod_id'),
+            mod_name            : commonProperties.getProperty('mod_name'),
+            mod_author          : commonProperties.getProperty('mod_author'),
+            mod_description     : commonProperties.getProperty('mod_description'),
+        ]
+
+        inputs.properties(replaceProperties)
+        filesMatching(['mcmod.info', 'pack.mcmeta']) {
+            expand(replaceProperties)
+        }
+        from(new File(repositoryRoot, 'src/main/resources/assets')) {
+            into 'assets'
+        }
+    }
+
+    tasks.named('jar', Jar) {
+        manifest {
+            attributes(
+                'Implementation-Title': commonProperties.getProperty('mod_name'),
+                'Implementation-Version': project.version,
+                'BHI-Distribution': 'NetEase Java Edition (legacy Forge)'
+            )
+        }
+    }
+}

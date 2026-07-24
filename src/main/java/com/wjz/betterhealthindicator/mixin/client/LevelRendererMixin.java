@@ -8,6 +8,16 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+//? if forge && >=1.21.6 && <1.21.9 {
+/*import com.mojang.blaze3d.vertex.PoseStack;
+import com.wjz.betterhealthindicator.platform.BhiPlatformHooks;
+import java.util.List;
+import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.world.entity.Entity;
+*/
+//?}
 //? if forge && >=1.21.9 {
 /*import com.mojang.blaze3d.vertex.PoseStack;
 import com.wjz.betterhealthindicator.platform.BhiPlatformHooks;
@@ -21,12 +31,26 @@ import net.minecraft.client.renderer.state.LevelRenderState;
 //?}
 
 /** 1.15 世界渲染回调的兼容入口；1.16+ 是无注入的空 Mixin。 */
-//? if forge {
+//? if forge && >=1.20.5 {
 /*@Mixin(value = LevelRenderer.class, remap = false)*/
 //?} else {
 @Mixin(LevelRenderer.class)
 //?}
 public class LevelRendererMixin {
+    //? if forge && >=1.21.6 && <1.21.9 {
+    /*@Inject(method = "renderEntities", at = @At("RETURN"))
+    private void betterHealthIndicator$collectForgeLegacyBuffers(
+            PoseStack poseStack,
+            MultiBufferSource.BufferSource buffers,
+            Camera camera,
+            DeltaTracker deltaTracker,
+            List<Entity> entities,
+            CallbackInfo ci
+    ) {
+        BhiPlatformHooks.dispatchLevelRender(poseStack, buffers, camera);
+    }
+    */
+    //?}
     //? if forge && >=1.21.9 {
     /*@Inject(method = "submitEntities", at = @At("RETURN"))
     private void betterHealthIndicator$collectForgeSubmits(

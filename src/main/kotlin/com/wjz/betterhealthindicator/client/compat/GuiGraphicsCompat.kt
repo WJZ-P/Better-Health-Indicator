@@ -144,13 +144,14 @@ fun BhiGuiGraphics.bhiBlitSprite(sprite: BhiIdentifier, x: Int, y: Int, width: I
         "hud/heart/hardcore_half" -> this.blit(bhiVanillaIdentifier("textures/gui/icons.png"), x, y, 61.0f, 45.0f, width, height, 256, 256)
         "hud/effect_background" -> this.fill(x, y, x + width, y + height, 0xA0202020.toInt())
         "hud/effect_background_ambient" -> this.fill(x, y, x + width, y + height, 0xA0404040.toInt())
-        "frame/square", "frame/round" -> this.blitScaled(
-            bhiIdentifier(sprite.namespace, "textures/gui/sprites/${sprite.path}.png"),
-            x, y, width, height,
-            0.0f, 0.0f,
-            26, 26,
-            26, 26,
-        )
+        "frame/square", "frame/round" -> {
+            val texture = bhiIdentifier(sprite.namespace, "textures/gui/sprites/${sprite.path}.png")
+            //? if >=1.20 {
+            this.blit(texture, x, y, width, height, 0.0f, 0.0f, 26, 26, 26, 26)
+            //?} else {
+            /*this.blitScaled(texture, x, y, width, height, 0.0f, 0.0f, 26, 26, 26, 26)*/
+            //?}
+        }
         else -> this.blit(sprite, x, y, 0.0f, 0.0f, width, height, width, height)
     }*/
     //?}
@@ -227,7 +228,7 @@ fun BhiGuiGraphics.bhiPopPose() {
 fun BhiGuiGraphics.bhiTranslate(x: Float, y: Float) {
     //? if >=1.21.5 {
     this.pose().translate(x, y)
-    //?} else if >=1.19 {
+    //?} else if >=1.20 {
     /*this.pose().translate(x, y, 0.0f)*/
     //?} else {
     /*this.pose().translate(x.toDouble(), y.toDouble(), 0.0)*/
@@ -258,7 +259,7 @@ fun BhiGuiGraphics.bhiEntity(
     this.entity(state, scale, translation, rotation, cameraRotation, x0, y0, x1, y1)
     //?} else if >=1.21.5 {
     /*this.submitEntityRenderState(state, scale, translation, rotation, cameraRotation, x0, y0, x1, y1)*/
-    //?} else if >=1.21 {
+    //?} else if >=1.20.5 {
     /*net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventory(
         this,
         (x0 + x1) / 2.0f,
@@ -290,7 +291,7 @@ fun BhiGuiGraphics.bhiEntity(
         cameraRotation,
         entity,
     )*/
-    //?} else if >=1.19 {
+    //?} else if >=1.19.3 {
     /*net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventory(
         this.poseStack,
         (x0 + x1) / 2,

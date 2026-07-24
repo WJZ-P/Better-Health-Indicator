@@ -60,6 +60,23 @@ stonecutter {
         version("forge-26.1.2", "26.1.2").buildscript("build-forge.gradle.kts")
         version("forge-1.21.11", "1.21.11").buildscript("build-forge.gradle.kts")
         version("forge-1.21.1", "1.21.1").buildscript("build-forge.gradle.kts")
+
+        // 网易开发者平台的数字标签不总是完整的 Minecraft 版本号：
+        // 1.20 / 1.18 / 1.16 分别对应 1.20.1 / 1.18.1 / 1.16.4；
+        // 1.21 则确实对应 Minecraft 1.21，并使用 Forge/FML 51.0.33。
+        // 网易 1.18+ 发行 Jar 内嵌并重定位 Kotlin；1.16 使用无 Kotlin 的完整爱心 Java 后端。
+        // 两类成品都不要求玩家在中国版环境另行安装 KotlinForForge。
+        // MC Studio 的网易 1.21.8 客户端使用 NeoForge 21.8.52；其余网易版本仍使用 Forge。
+        version("netease-1.21.8", "1.21.8").buildscript("build-netease-neoforge.gradle.kts")
+        version("netease-1.21", "1.21").buildscript("build-netease.gradle.kts")
+        version("netease-1.20.6", "1.20.6").buildscript("build-netease.gradle.kts")
+        version("netease-1.20", "1.20.1").buildscript("build-netease.gradle.kts")
+        version("netease-1.19.2", "1.19.2").buildscript("build-netease.gradle.kts")
+        version("netease-1.18", "1.18.1").buildscript("build-netease.gradle.kts")
+        version("netease-1.16", "1.16.4").buildscript("build-netease-legacy.gradle.kts")
+
+        // 网易 1.12.2 / 1.11.2 / 1.7.10 由 legacy/netease-forge 中隔离的
+        // Gradle 8.7 构建负责，不能作为当前 Gradle 9.5 的 Stonecutter 子项目加载。
         vcsVersion = "26.1.2"
     }
 }

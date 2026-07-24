@@ -173,11 +173,16 @@ fun BhiWorldCollector.bhiSubmitText(
     this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)
     //?} else if forge && >=1.21.9 {
     /*this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)*/
-    //?} else if forge_like {
+    //?} else if forge_like && >=1.19.3 {
     /*font.drawInBatch(text, x, y, color, shadow, poseStack.last().pose(), this, displayMode.vanilla(), backgroundColor, light)*/
+    //?} else if forge_like {
+    /*font.drawInBatch(
+        text, x, y, color, shadow, poseStack.last().pose(), this,
+        displayMode == BhiFontDisplayMode.SEE_THROUGH, backgroundColor, light,
+    )*/
     //?} else if >=1.21.9 {
     /*this.submitText(poseStack, x, y, text, shadow, displayMode.vanilla(), light, color, backgroundColor, outlineColor)*/
-    //?} else if >=1.19 {
+    //?} else if >=1.19.3 {
     /*font.drawInBatch(text, x, y, color, shadow, poseStack.last().pose(), this, displayMode.vanilla(), backgroundColor, light)*/
     //?} else if >=1.16 {
     /*font.drawInBatch(

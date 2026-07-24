@@ -8,7 +8,7 @@ import net.minecraft.client.multiplayer.ClientLevel
 /*import net.minecraft.client.multiplayer.MultiPlayerLevel*/
 //?}
 import net.minecraft.client.gui.screens.Screen
-//? if >=1.21 {
+//? if >=1.20.5 {
 import net.minecraft.core.Holder
 //?}
 import net.minecraft.network.chat.Component
@@ -23,7 +23,7 @@ typealias BhiClientLevel = ClientLevel
 /*typealias BhiClientLevel = MultiPlayerLevel*/
 //?}
 
-//? if >=1.21 {
+//? if >=1.20.5 {
 typealias BhiMobEffectRef = Holder<MobEffect>
 //?} else {
 /*typealias BhiMobEffectRef = MobEffect*/
